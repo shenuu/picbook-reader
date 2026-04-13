@@ -1,260 +1,351 @@
 /**
  * @file services/cache.service.js
- * @description 绘本朗读助手 - 缓存服务（核心服务）
+ * @description 绘本朗读助手 - 页面缓存服务
  *
  * 职责：
- *  1. 基于 LRU Cache（utils/lru-cache.js）管理页面缓存
- *  2. 以图片 XOR Hash 为键，存储 { text, imagePath, audioPath, createdAt }
- *  3. 最大缓存 20 页，超出时淘汰最久未访问的条目（含其音频文件）
- *  4. 持久化：LRU 内存结构 + wx.setStorageSync 双层存储
- *     - 启动时从 Storage 恢复 LRU 顺序
- *     - 每次写入/淘汰后同步持久化元数据
- *  5. 音频文件路径管理：淘汰时调用 wx.getFileSystemManager 删除本地文件
- *  6. 提供缓存统计信息
+ *  1. 基于 utils/lru-cache.js 管理最近 20 页的 OCR 文字 + 音频路径
+ *  2. LRU 淘汰时自动删除对应的本地 MP3 文件（防止磁盘泄漏）
+ *  3. 冷启动时从 wx.storage 恢复 LRU 元数据（持久化）
+ *  4. 每次写操作后将元数据同步回 wx.storage
  *
- * 缓存 Key：  图片 XOR Hash（16进制字符串）
- * 缓存 Value：PageCacheEntry（见下方 typedef）
- *
- * 存储分层：
- *  内存  → LRUCache 实例（O(1) 读写）
- *  磁盘  → wx.Storage（key: '__picbook_cache_meta'）存 JSON 序列化的 entries 列表
- *  文件系统 → TTS 生成的 .mp3 文件
- *
- * @typedef {object} PageCacheEntry
- * @property {string} hash        - 图片指纹
- * @property {string} text        - OCR 识别文字
- * @property {string} imagePath   - 压缩后图片本地路径
- * @property {string} [audioPath] - TTS 生成的 MP3 本地路径（可能为空）
- * @property {number} createdAt   - Unix 时间戳（ms）
- * @property {number} [sizeKB]    - 条目估算大小（可选，用于统计）
+ * 缓存节点结构（PageCacheEntry）：
+ *  {
+ *    pageHash: string,         // 图片 XOR 指纹
+ *    text: string,             // OCR 识别全文
+ *    audioPath: string,        // 本地 TTS MP3 路径（合成后写入，初始为 ''）
+ *    timestamp: number,        // 首次写入时间
+ *    lastAccessAt: number,     // 最后访问时间（LRU 使用）
+ *  }
  *
  * @author Jamie Park
  * @version 0.1.0
  */
 
 const LRUCache = require('../utils/lru-cache');
-
-/** Storage Key，用于持久化 LRU 元数据 */
-const STORAGE_KEY = '__picbook_cache_meta';
-
-/** 最大缓存页数 */
-const MAX_CACHE_SIZE = 20;
+const {
+  CACHE_MAX_SIZE,
+  CACHE_STORAGE_KEY,
+} = require('../config');
 
 // ─────────────────────────────────────────────────────────────────
-//  单例初始化
+//  模块级单例
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * LRU Cache 实例（模块级单例）
- * capacity = MAX_CACHE_SIZE，淘汰回调中删除本地音频文件
- * @type {LRUCache}
+ * LRU 缓存实例（懒初始化，首次操作时从 Storage 恢复）
+ * @type {LRUCache|null}
  */
-const lruCache = new LRUCache(MAX_CACHE_SIZE, _onEvict);
+let _cache = null;
 
-/** 模块是否已从 Storage 恢复 */
+/** 是否已完成初始化（避免重复从 Storage 读取） */
 let _initialized = false;
 
-/**
- * 初始化：从 wx.Storage 恢复 LRU 数据（按 lastAccess 升序还原访问顺序）
- * 第一次调用任意公开方法时自动触发
- * @private
- */
-function _ensureInitialized() {
-  if (_initialized) return;
-  _initialized = true;
-
-  try {
-    const raw = wx.getStorageSync(STORAGE_KEY);
-    if (!raw) return;
-
-    /** @type {PageCacheEntry[]} */
-    const entries = JSON.parse(raw);
-    // 按 createdAt 升序恢复（最旧的最先插入，使 LRU 顺序正确）
-    entries
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .forEach((entry) => lruCache.put(entry.hash, entry));
-
-    console.info(`[Cache] 已从 Storage 恢复 ${entries.length} 条缓存`);
-  } catch (err) {
-    console.error('[Cache] 恢复缓存失败，将以空缓存启动', err);
-    // 恢复失败不影响正常使用，清空 Storage 防止下次再失败
-    wx.removeStorageSync(STORAGE_KEY);
-  }
-}
+/** 当前正在进行的初始化 Promise，防止并发多次初始化 */
+let _initPromise = null;
 
 // ─────────────────────────────────────────────────────────────────
-//  公开接口 — 读写
+//  公开接口
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * 读取缓存页（同时更新 LRU 访问顺序）
+ * 读取页面缓存条目
+ * 同时更新该条目的 lastAccessAt（触发 LRU 移动到最新位置）
  *
- * @param {string} hash - 图片指纹
- * @returns {Promise<PageCacheEntry|null>} 缓存条目，未命中返回 null
+ * @param {string} pageHash - 图片指纹
+ * @returns {Promise<PageCacheEntry|null>} 命中时返回条目，否则返回 null
  */
-async function getPage(hash) {
-  _ensureInitialized();
+async function getPage(pageHash) {
+  await _ensureInitialized();
 
-  const entry = lruCache.get(hash);
-  if (!entry) {
-    console.info('[Cache] 未命中，hash =', hash);
-    return null;
-  }
+  const entry = _cache.get(pageHash);
+  if (!entry) return null;
 
-  // TODO: 验证 imagePath / audioPath 文件是否仍存在（文件可能被系统清理）
-  // if (entry.audioPath && !_fileExists(entry.audioPath)) {
-  //   entry.audioPath = '';
-  //   lruCache.put(hash, entry);
-  //   _persist();
-  // }
+  // 更新最后访问时间（LRU 已在 get() 内部将节点移至最新）
+  entry.lastAccessAt = Date.now();
 
-  console.info('[Cache] 命中，hash =', hash);
+  // 异步持久化（不阻塞主流程）
+  _persistAsync();
+
   return entry;
 }
 
 /**
- * 写入缓存页
- * 若 hash 已存在则更新；若超过容量则 LRU 自动淘汰最旧条目（触发 _onEvict）
+ * 写入页面缓存条目
+ * 若该 hash 已存在，则更新并移到 LRU 最新位置；
+ * 若已满 20 条，自动淘汰最旧条目（连带删除其 MP3 文件）
  *
- * @param {string} hash                    - 图片指纹
- * @param {{ text: string, imagePath: string, audioPath?: string }} data
+ * @param {string} pageHash   - 图片指纹
+ * @param {{ text: string, imagePath?: string }} payload - OCR 结果（audioPath 默认为空）
  * @returns {Promise<void>}
  */
-async function setPage(hash, data) {
-  _ensureInitialized();
+async function setPage(pageHash, payload) {
+  await _ensureInitialized();
+
+  const now = Date.now();
 
   /** @type {PageCacheEntry} */
   const entry = {
-    hash,
-    text: data.text || '',
-    imagePath: data.imagePath || '',
-    audioPath: data.audioPath || '',
-    createdAt: Date.now(),
+    pageHash,
+    text: payload.text || '',
+    audioPath: payload.audioPath || '',
+    timestamp: now,
+    lastAccessAt: now,
   };
 
-  lruCache.put(hash, entry);
-  _persist();
+  _cache.put(pageHash, entry);
 
-  console.info('[Cache] 已写入，hash =', hash, '| 当前缓存数:', lruCache.size());
+  // 同步持久化
+  await _persist();
 }
 
 /**
- * 更新已存在条目的音频路径（TTS 合成完成后回写）
+ * 将 TTS 生成的音频路径写回对应的缓存条目
+ * 若 pageHash 不存在于缓存（例如已被淘汰），操作静默忽略
  *
- * @param {string} hash
+ * @param {string} pageHash  - 图片指纹
  * @param {string} audioPath - 本地 MP3 路径
  * @returns {Promise<void>}
  */
-async function updateAudioPath(hash, audioPath) {
-  _ensureInitialized();
+async function updateAudioPath(pageHash, audioPath) {
+  await _ensureInitialized();
 
-  const entry = lruCache.get(hash);
+  const entry = _cache.get(pageHash);
   if (!entry) {
-    console.warn('[Cache] updateAudioPath: 未找到 hash =', hash);
+    console.warn('[Cache] updateAudioPath: 未找到 pageHash =', pageHash);
     return;
   }
 
   entry.audioPath = audioPath;
-  lruCache.put(hash, entry); // 重新 put 以更新 LRU 顺序
-  _persist();
+  entry.lastAccessAt = Date.now();
+
+  await _persist();
 }
-
-/**
- * 清除全部缓存（内存 + Storage + 本地音频文件）
- * @returns {Promise<void>}
- */
-async function clearAll() {
-  _ensureInitialized();
-
-  // 遍历所有条目，删除音频文件
-  const allEntries = lruCache.values();
-  allEntries.forEach((entry) => _deleteAudioFile(entry.audioPath));
-
-  lruCache.clear();
-  wx.removeStorageSync(STORAGE_KEY);
-
-  console.info('[Cache] 已清除全部缓存');
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  公开接口 — 统计
-// ─────────────────────────────────────────────────────────────────
 
 /**
  * 获取缓存统计信息
- *
  * @returns {Promise<{ count: number, maxCount: number, totalSizeKB: number }>}
  */
 async function getStats() {
-  _ensureInitialized();
+  await _ensureInitialized();
 
-  const count = lruCache.size();
-  const entries = lruCache.values();
+  const entries = _cache.values();
+  const count = _cache.size();
 
-  // 估算总大小：文字长度 * 2 字节 + 音频文件大小（TODO：实际读取文件大小）
+  // 粗略估算文本缓存占用（音频文件大小需从 FS 读取，这里仅统计文本）
   let totalSizeKB = 0;
-  entries.forEach((entry) => {
-    const textBytes = (entry.text || '').length * 2;
-    // TODO: 读取 entry.audioPath 文件大小
-    totalSizeKB += Math.ceil(textBytes / 1024);
+  for (const entry of entries) {
+    // 文本按 2 字节/字符估算（中文 UTF-8 占 3 字节，这里保守估算）
+    totalSizeKB += Math.ceil((entry.text?.length || 0) * 2 / 1024);
+  }
+
+  return { count, maxCount: CACHE_MAX_SIZE, totalSizeKB };
+}
+
+/**
+ * 删除指定页面的缓存及其 MP3 文件
+ * @param {string} pageHash
+ * @returns {Promise<boolean>} 是否成功删除
+ */
+async function removePage(pageHash) {
+  await _ensureInitialized();
+
+  const entry = _cache.get(pageHash);
+  if (entry?.audioPath) {
+    _deleteAudioFile(entry.audioPath);
+  }
+
+  const deleted = _cache.delete(pageHash);
+  if (deleted) {
+    await _persist();
+  }
+  return deleted;
+}
+
+/**
+ * 清空全部缓存：删除所有 MP3 文件 + 清空 LRU + 清空 Storage
+ * @returns {Promise<void>}
+ */
+async function clearAll() {
+  await _ensureInitialized();
+
+  // 删除所有已缓存的 MP3 文件
+  const entries = _cache.values();
+  for (const entry of entries) {
+    if (entry.audioPath) {
+      _deleteAudioFile(entry.audioPath);
+    }
+  }
+
+  _cache.clear();
+
+  try {
+    wx.removeStorageSync(CACHE_STORAGE_KEY);
+  } catch (err) {
+    console.warn('[Cache] 清空 Storage 失败:', err.message);
+  }
+
+  console.info('[Cache] 缓存已全部清空');
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  初始化与持久化
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 确保缓存服务已初始化（懒加载，只执行一次）
+ * 通过 _initPromise 防止并发初始化
+ * @private
+ */
+function _ensureInitialized() {
+  if (_initialized) return Promise.resolve();
+  if (_initPromise) return _initPromise;
+
+  _initPromise = _initialize().then(() => {
+    _initialized = true;
+    _initPromise = null;
   });
 
-  return { count, maxCount: MAX_CACHE_SIZE, totalSizeKB };
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  内部工具
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * LRU 淘汰回调：删除被淘汰条目的本地音频文件
- * @param {string} hash
- * @param {PageCacheEntry} entry
- * @private
- */
-function _onEvict(hash, entry) {
-  console.info('[Cache] 淘汰条目，hash =', hash);
-  _deleteAudioFile(entry.audioPath);
-  // 持久化在外部 setPage 调用中处理，此处无需再调用 _persist
+  return _initPromise;
 }
 
 /**
- * 删除本地音频文件（静默失败）
- * @param {string} [audioPath]
+ * 从 wx.storage 读取 LRU 元数据并重建缓存实例
  * @private
  */
-function _deleteAudioFile(audioPath) {
-  if (!audioPath) return;
-  try {
-    wx.getFileSystemManager().unlinkSync(audioPath);
-    console.info('[Cache] 已删除音频文件:', audioPath);
-  } catch (err) {
-    // 文件不存在或已被系统清理，忽略
-    console.warn('[Cache] 删除音频文件失败（可忽略）:', audioPath, err.message);
+function _initialize() {
+  return new Promise((resolve) => {
+    // 创建 LRU 实例，附带淘汰回调（自动删除被淘汰条目的 MP3 文件）
+    _cache = new LRUCache(CACHE_MAX_SIZE, _onEvict);
+
+    let savedMeta = null;
+    try {
+      savedMeta = wx.getStorageSync(CACHE_STORAGE_KEY);
+    } catch (err) {
+      console.warn('[Cache] 读取持久化元数据失败:', err.message);
+    }
+
+    if (savedMeta && savedMeta.order && savedMeta.nodes) {
+      _restoreFromMeta(savedMeta);
+      console.info(`[Cache] 冷启动恢复完成，恢复 ${_cache.size()} 条缓存`);
+    } else {
+      console.info('[Cache] 无持久化数据，使用空缓存');
+    }
+
+    resolve();
+  });
+}
+
+/**
+ * 从持久化元数据重建 LRU 链表顺序
+ * savedMeta.order 是从最旧到最新的 pageHash 数组
+ * 按顺序 put 可以正确重建 LRU 的相对顺序
+ *
+ * @param {{ order: string[], nodes: object }} meta
+ * @private
+ */
+function _restoreFromMeta(meta) {
+  const { order, nodes } = meta;
+
+  for (const pageHash of order) {
+    const entry = nodes[pageHash];
+    if (!entry) continue;
+
+    // 校验恢复的音频文件是否仍存在（可能已被系统清理）
+    const validEntry = { ...entry };
+    if (validEntry.audioPath && !_fileExists(validEntry.audioPath)) {
+      console.info('[Cache] 音频文件已不存在，清除 audioPath:', validEntry.audioPath);
+      validEntry.audioPath = '';
+    }
+
+    // 按旧→新顺序 put，最后 put 的为 LRU 最新
+    _cache.put(pageHash, validEntry);
   }
 }
 
 /**
- * 将 LRU 数据序列化后持久化到 wx.Storage
- * 注意：同步写入，调用方频繁写入时可考虑加 debounce
+ * 将当前 LRU 元数据序列化并写入 wx.storage
+ * 使用 try/catch 防止 Storage 配额异常影响主流程
  * @private
  */
-function _persist() {
+async function _persist() {
   try {
-    const entries = lruCache.values(); // 按 LRU 顺序（最旧 → 最新）
-    wx.setStorageSync(STORAGE_KEY, JSON.stringify(entries));
+    const entries = _cache.entries(); // [最旧, ..., 最新]
+    const order = entries.map(([key]) => key);
+    const nodes = {};
+    for (const [key, val] of entries) {
+      nodes[key] = val;
+    }
+
+    const meta = {
+      version: 1,
+      capacity: CACHE_MAX_SIZE,
+      size: _cache.size(),
+      order,
+      nodes,
+    };
+
+    wx.setStorageSync(CACHE_STORAGE_KEY, meta);
   } catch (err) {
-    console.error('[Cache] 持久化失败', err);
+    console.warn('[Cache] 持久化元数据失败:', err.message);
   }
 }
 
 /**
- * 检查本地文件是否存在
+ * 非阻塞持久化（避免阻塞调用者）
+ * @private
+ */
+function _persistAsync() {
+  _persist().catch((err) => {
+    console.warn('[Cache] 异步持久化失败:', err.message);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  LRU 淘汰回调
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * LRU 淘汰回调：删除被淘汰条目的本地 MP3 文件
+ * 在 LRU.put() 触发容量溢出时，由 LRUCache 内部调用
+ *
+ * @param {string}          key   - 被淘汰的 pageHash
+ * @param {PageCacheEntry}  value - 被淘汰的缓存条目
+ * @private
+ */
+function _onEvict(key, value) {
+  console.info(`[Cache] 淘汰页面缓存: ${key}，audioPath: ${value?.audioPath || '无'}`);
+  if (value?.audioPath) {
+    _deleteAudioFile(value.audioPath);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  文件系统工具
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 删除本地 MP3 文件（静默处理，失败不抛异常）
+ * @param {string} filePath
+ * @private
+ */
+function _deleteAudioFile(filePath) {
+  if (!filePath) return;
+
+  wx.getFileSystemManager().unlink({
+    filePath,
+    success: () => console.info('[Cache] 已删除音频文件:', filePath),
+    fail: (err) => console.warn('[Cache] 删除音频文件失败（可能已不存在）:', filePath, err.errMsg),
+  });
+}
+
+/**
+ * 同步检查文件是否存在
  * @param {string} filePath
  * @returns {boolean}
  * @private
  */
 function _fileExists(filePath) {
+  if (!filePath) return false;
   try {
     wx.getFileSystemManager().accessSync(filePath);
     return true;
@@ -271,6 +362,7 @@ module.exports = {
   getPage,
   setPage,
   updateAudioPath,
-  clearAll,
   getStats,
+  removePage,
+  clearAll,
 };

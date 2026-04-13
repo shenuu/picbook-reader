@@ -1,0 +1,247 @@
+/**
+ * @file pages/guide/index.wxss
+ * @description 拍照引导页样式
+ *
+ * @author Jamie Park
+ */
+
+/* ── 页面结构 ─────────────────────────────────────────── */
+
+.page {
+  min-height: 100vh;
+  background-color: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 页面标题 ─────────────────────────────────────────── */
+
+.page-header {
+  padding: var(--space-5) var(--space-5) var(--space-3);
+  text-align: center;
+}
+
+.page-header__title {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.page-header__subtitle {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ── 图片预览区 ───────────────────────────────────────── */
+
+.preview-area {
+  flex: 1;
+  position: relative;
+  margin: var(--space-4) var(--space-5);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-bg-card);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  min-height: 560rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 空状态引导框 */
+.empty-guide {
+  width: 100%;
+  height: 100%;
+  min-height: 560rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.empty-guide__frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  border: 4rpx dashed var(--color-primary-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10) var(--space-8);
+  width: 100%;
+}
+
+.empty-guide__icon {
+  font-size: 96rpx;
+  opacity: 0.7;
+}
+
+.empty-guide__tips {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* 图片预览 */
+.preview-image {
+  width: 100%;
+  height: 100%;
+  min-height: 560rpx;
+  border-radius: var(--radius-xl);
+}
+
+/* ── 进度覆盖层 ───────────────────────────────────────── */
+
+.progress-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--radius-xl);
+  width: 480rpx;
+}
+
+.progress-panel__spinner {
+  font-size: 64rpx;
+  display: inline-block;
+}
+
+.progress-panel__label {
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* 进度条 */
+.progress-bar-wrap {
+  width: 100%;
+  height: 16rpx;
+  background-color: var(--color-bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  border-radius: var(--radius-full);
+  transition: width 200ms ease-out;
+  min-width: 4rpx;
+}
+
+/* ── 成功覆盖层 ───────────────────────────────────────── */
+
+.success-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(76, 175, 80, 0.85);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  animation: fadeIn var(--duration-normal) ease-in;
+}
+
+.success-overlay__icon {
+  font-size: 96rpx;
+}
+
+.success-overlay__text {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── 错误面板 ─────────────────────────────────────────── */
+
+.error-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.error-panel__icon {
+  font-size: 80rpx;
+}
+
+.error-panel__msg {
+  font-size: var(--text-base);
+  color: var(--color-error);
+  line-height: 1.6;
+  max-width: 480rpx;
+}
+
+/* ── 底部操作区 ───────────────────────────────────────── */
+
+.bottom-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.btn-shoot {
+  width: 100%;
+  height: 104rpx;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-full) !important;
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-primary) !important;
+  border: none !important;
+}
+
+.btn-shoot::after {
+  border: none;
+}
+
+.btn-shoot--disabled {
+  background-color: var(--color-text-disabled) !important;
+  box-shadow: none !important;
+}
+
+.btn-shoot__icon {
+  font-size: 48rpx;
+}
+
+.tip-text {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+}
+
+/* 安全区 */
+.safe-bottom {
+  padding-bottom: calc(var(--space-5) + constant(safe-area-inset-bottom));
+  padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+}

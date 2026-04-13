@@ -75,8 +75,19 @@ Page({
    * @private
    */
   _initNetworkListener() {
-    // TODO: 调用 network.getNetworkStatus() 获取初始状态并 setData
-    // TODO: 调用 network.onNetworkStatusChange(this._onNetworkChange) 注册回调
+    // 异步获取当前网络状态并立即更新 UI
+    network.getNetworkStatus().then((status) => {
+      this.setData({
+        isOnline: status.isConnected,
+        networkType: status.networkType,
+      });
+    }).catch((err) => {
+      console.warn('[Home] 获取初始网络状态失败:', err.message);
+    });
+
+    // 绑定 this，保存引用以供 offNetworkStatusChange 使用
+    this._onNetworkChange = this._onNetworkChange.bind(this);
+    network.onNetworkStatusChange(this._onNetworkChange);
   },
 
   /**
@@ -85,8 +96,17 @@ Page({
    * @param {{ isConnected: boolean, networkType: string }} status
    */
   _onNetworkChange(status) {
-    // TODO: setData({ isOnline: status.isConnected, networkType: status.networkType })
-    // TODO: 若从离线恢复在线，可 toast 提示"已恢复网络连接"
+    const wasOffline = !this.data.isOnline;
+
+    this.setData({
+      isOnline: status.isConnected,
+      networkType: status.networkType,
+    });
+
+    // 从离线恢复在线时，轻提示用户
+    if (wasOffline && status.isConnected) {
+      wx.showToast({ title: '已恢复网络连接', icon: 'none', duration: 2000 });
+    }
   },
 
   // ─────────────────────────────────────────────
@@ -100,8 +120,8 @@ Page({
   async _loadCacheStats() {
     this.setData({ loadingStats: true });
     try {
-      // TODO: const stats = await cacheService.getStats();
-      // TODO: this.setData({ cacheStats: stats, loadingStats: false });
+      const stats = await cacheService.getStats();
+      this.setData({ cacheStats: stats, loadingStats: false });
     } catch (err) {
       console.error('[Home] 获取缓存统计失败', err);
       this.setData({ loadingStats: false });
@@ -114,22 +134,30 @@ Page({
 
   /**
    * 点击"开始拍照"按钮 → 跳转拍照引导页
+   * 若离线且缓存为空，弹窗提醒用户先连网
    */
   onTapStartScan() {
-    // TODO: 若离线且无缓存可用，弹窗提示"请连接网络后再使用"
+    if (!this.data.isOnline && this.data.cacheStats.count === 0) {
+      wx.showModal({
+        title: '当前无网络',
+        content: '首次使用需要联网识别绘本文字，请连接 Wi-Fi 或移动网络后再试。',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
     wx.navigateTo({ url: '/pages/guide/index' });
   },
 
   /**
-   * 点击"缓存管理"按钮 → 跳转缓存列表页
-   * （缓存列表页为后续迭代，暂时用 showModal 展示统计）
+   * 点击"缓存管理"按钮 → 弹 Modal 展示统计，支持一键清除
    */
   onTapCacheManager() {
     const { count, maxCount, totalSizeKB } = this.data.cacheStats;
     wx.showModal({
       title: '缓存状态',
       content: `已缓存 ${count}/${maxCount} 页\n占用空间约 ${totalSizeKB} KB`,
-      showCancel: true,
+      showCancel: count > 0, // 有缓存时才显示"清除缓存"按钮
       cancelText: '清除缓存',
       confirmText: '关闭',
       success: (res) => {
@@ -141,14 +169,14 @@ Page({
   },
 
   /**
-   * 清除全部缓存
+   * 清除全部缓存（含本地 MP3 文件）
    * @private
    */
   async _handleClearCache() {
-    wx.showLoading({ title: '清除中…' });
+    wx.showLoading({ title: '清除中…', mask: true });
     try {
-      // TODO: await cacheService.clearAll();
-      // TODO: this._loadCacheStats();
+      await cacheService.clearAll();
+      await this._loadCacheStats(); // 刷新统计
       wx.showToast({ title: '缓存已清除', icon: 'success' });
     } catch (err) {
       console.error('[Home] 清除缓存失败', err);

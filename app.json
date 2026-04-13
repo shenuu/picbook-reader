@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "src/pages/home/index",
+    "src/pages/guide/index",
+    "src/pages/result/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FF7043",
+    "navigationBarTitleText": "绘本朗读助手",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#FFFDF8",
+    "enablePullDownRefresh": false
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.camera": {
+      "desc": "需要使用摄像头拍摄绘本页面，以识别文字内容"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseMedia"
+  ]
+}

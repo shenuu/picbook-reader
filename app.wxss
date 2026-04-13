@@ -1,0 +1,301 @@
+/**
+ * @file app.wxss
+ * @description 绘本朗读助手 - 全局样式
+ *
+ * 包含：
+ *  1. CSS 变量（Design Tokens）：颜色、字体、间距、阴影、圆角、动效时长
+ *  2. 全局 Reset & 基础排版
+ *  3. 通用原子工具类（卡片、按钮、离线 Toast 等）
+ *  4. 全局旋转动画（.spin）
+ *
+ * 命名规范（BEM + CSS Variable）：
+ *  - 颜色变量：--color-{role}-{modifier}
+ *  - 间距变量：--space-{n}  (4rpx 为 1 unit，共 1-16)
+ *  - 文字大小：--text-{size}
+ *  - 圆角：    --radius-{size}
+ *  - 阴影：    --shadow-{level}
+ *  - 动效：    --duration-{speed}
+ *
+ * @author Jamie Park
+ * @version 0.1.0
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════════ */
+
+page {
+  /* ── 品牌色 ──────────────────────────────────────────────── */
+  --color-primary:         #FF7043;   /* 活泼橙，主按钮 / 强调 */
+  --color-primary-dark:    #E64A19;   /* 深橙，悬停/按压态 */
+  --color-primary-light:   #FBE9E7;   /* 浅橙背景，标签底色 */
+  --color-accent:          #FFCA28;   /* 金黄，进度条渐变终点 */
+
+  /* ── 语义色 ──────────────────────────────────────────────── */
+  --color-success:         #4CAF50;
+  --color-success-light:   #E8F5E9;
+  --color-warning:         #FF9800;
+  --color-warning-light:   #FFF3E0;
+  --color-error:           #E53935;
+  --color-error-light:     #FFEBEE;
+  --color-info:            #1976D2;
+  --color-info-light:      #E3F2FD;
+
+  /* ── 文字色 ──────────────────────────────────────────────── */
+  --color-text-primary:    #1A1A1A;
+  --color-text-secondary:  #757575;
+  --color-text-disabled:   #BDBDBD;
+
+  /* ── 背景色 ──────────────────────────────────────────────── */
+  --color-bg-base:         #FFFDF8;   /* 全局页面底色（暖白） */
+  --color-bg-card:         #FFFFFF;   /* 卡片底色 */
+  --color-bg-muted:        #F5F5F5;   /* 浅灰底色（进度条轨道等） */
+
+  /* ── 字体 ────────────────────────────────────────────────── */
+  --font-family-base:      'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-family-number:    'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
+
+  /* ── 字体大小（单位 rpx） ────────────────────────────────── */
+  --text-xs:    24rpx;
+  --text-sm:    28rpx;
+  --text-base:  32rpx;
+  --text-md:    34rpx;
+  --text-lg:    36rpx;
+  --text-xl:    40rpx;
+  --text-2xl:   48rpx;
+  --text-3xl:   56rpx;
+
+  /* ── 间距（1 unit = 8rpx） ───────────────────────────────── */
+  --space-1:    8rpx;
+  --space-2:    16rpx;
+  --space-3:    24rpx;
+  --space-4:    32rpx;
+  --space-5:    40rpx;
+  --space-6:    48rpx;
+  --space-7:    56rpx;
+  --space-8:    64rpx;
+  --space-10:   80rpx;
+  --space-12:   96rpx;
+
+  /* ── 圆角 ────────────────────────────────────────────────── */
+  --radius-sm:   8rpx;
+  --radius-md:   16rpx;
+  --radius-lg:   24rpx;
+  --radius-xl:   32rpx;
+  --radius-2xl:  48rpx;
+  --radius-full: 9999rpx;
+
+  /* ── 阴影 ────────────────────────────────────────────────── */
+  --shadow-sm:      0 2rpx  8rpx  rgba(0, 0, 0, 0.06);
+  --shadow-md:      0 4rpx  16rpx rgba(0, 0, 0, 0.08);
+  --shadow-lg:      0 8rpx  32rpx rgba(0, 0, 0, 0.12);
+  --shadow-primary: 0 8rpx  24rpx rgba(255, 112, 67, 0.40);
+
+  /* ── 动效时长 ────────────────────────────────────────────── */
+  --duration-fast:   150ms;
+  --duration-normal: 250ms;
+  --duration-slow:   400ms;
+
+  /* ── 内容最大宽度（平板适配用） ──────────────────────────── */
+  --content-max-width: 750rpx;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   2. 全局 RESET & 基础排版
+   ═══════════════════════════════════════════════════════════════ */
+
+page {
+  font-family: var(--font-family-base);
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  /* 禁止默认点击高亮 */
+  -webkit-tap-highlight-color: transparent;
+  /* 禁止双指缩放（绘本阅读场景不需要） */
+  touch-action: pan-x pan-y;
+}
+
+view, text, image, button, input, textarea, scroll-view {
+  box-sizing: border-box;
+}
+
+/* 禁止文字超出时触发宿主级别橡皮筋效果，由各页面自身决定滚动 */
+scroll-view {
+  box-sizing: border-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. 通用卡片容器
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * .card — 通用白色卡片
+ * 使用：<view class="card"> ... </view>
+ * 可组合：<view class="card card--no-shadow">
+ */
+.card {
+  background-color: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-md);
+}
+
+.card--no-shadow {
+  box-shadow: none;
+}
+
+.card--elevated {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. 通用按钮样式（提供基础，各页面可覆盖）
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * .btn-primary — 橙色主按钮
+ * .btn-secondary — 描边次要按钮
+ */
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96rpx;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: #fff;
+  background-color: var(--color-primary);
+  box-shadow: var(--shadow-primary);
+  border: none;
+  /* 清除微信 button 默认内阴影 */
+  outline: none;
+  transition: transform var(--duration-fast) ease, opacity var(--duration-fast) ease;
+}
+
+/* 按压态（通过 hover-class 绑定） */
+.btn-primary--hover {
+  transform: scale(0.97);
+  opacity: 0.90;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-primary);
+  background-color: transparent;
+  border: 2rpx solid var(--color-primary);
+  box-shadow: none;
+  outline: none;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.btn-secondary--hover {
+  background-color: var(--color-primary-light);
+}
+
+/* 清除所有 button 元素的微信默认 ::after 边框 */
+button::after {
+  border: none;
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. 全局离线 Toast（首页 & 引导页公用）
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * .offline-toast — 顶部滑入的离线提示条
+ * 通过 .visible class 控制显示/隐藏
+ *
+ * 使用：
+ *   <view class="offline-toast {{!isOnline ? 'visible' : ''}}">
+ */
+.offline-toast {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background-color: #37474F;
+  color: #fff;
+  font-size: var(--text-sm);
+
+  /* 初始隐藏（向上平移） */
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform var(--duration-normal) ease, opacity var(--duration-normal) ease;
+
+  /* 顶部安全区兼容 */
+  padding-top: calc(var(--space-3) + constant(safe-area-inset-top));
+  padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+}
+
+.offline-toast.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.offline-toast__icon {
+  font-size: var(--text-xl);
+  flex-shrink: 0;
+}
+
+.offline-toast__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.offline-toast__title {
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+
+.offline-toast__desc {
+  font-size: var(--text-xs);
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   6. 工具动画类
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * .spin — 无限旋转（用于 Loading 图标）
+ * 使用：<text class="spin">⚙️</text>
+ */
+.spin {
+  display: inline-block;
+  animation: rotate360 1.0s linear infinite;
+  transform-origin: center center;
+}
+
+@keyframes rotate360 {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/**
+ * .fade-in — 淡入
+ */
+.fade-in {
+  animation: fadeInGlobal var(--duration-normal) ease both;
+}
+
+@keyframes fadeInGlobal {
+  from { opacity: 0; transform: translateY(16rpx); }
+  to   { opacity: 1; transform: translateY(0); }
+}

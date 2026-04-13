@@ -1,0 +1,133 @@
+<!--
+  @file pages/result/index.wxml
+  @description 绘本朗读助手 - 识别结果页模板
+
+  播放状态机（playStatus）对应 UI：
+  ┌──────────────┬──────────────────────────────────────────────┐
+  │ playStatus   │ 播放按钮                  │ 进度条/文字       │
+  ├──────────────┼───────────────────────────┼────────────────── │
+  │ idle         │ 橙色「朗读」按钮           │ 隐藏              │
+  │ loading      │ 灰色「合成中 xx%」禁用    │ TTS 进度条        │
+  │ playing      │ 橙色脉冲「暂停」按钮      │ 播放进度条        │
+  │ finished     │ 蓝色「重新朗读」按钮      │ 播放进度条（满）  │
+  │ error        │ 红色「重试」按钮          │ 错误提示          │
+  └──────────────┴──────────────────────────┴───────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- ── 缓存状态标签 ───────────────────────────── -->
+  <view class="cache-badge-row">
+    <view class="cache-badge cache-badge--{{cacheStatus}}">
+      <text wx:if="{{cacheStatus === 'cached'}}">✅ 已缓存</text>
+      <text wx:elif="{{cacheStatus === 'saving'}}">💾 保存中…</text>
+      <text wx:else>☁️ 未缓存</text>
+    </view>
+    <text wx:if="{{fromCache}}" class="from-cache-tag">来自缓存</text>
+  </view>
+
+  <!-- ── OCR 文字展示区 ─────────────────────────── -->
+  <scroll-view class="text-scroll" scroll-y>
+    <!-- 有内容 -->
+    <view class="text-card card" wx:if="{{ocrText}}">
+      <text class="text-card__label">识别内容</text>
+      <text class="text-card__body" selectable>{{ocrText}}</text>
+    </view>
+
+    <!-- 无内容（缓存加载中或出错） -->
+    <view class="text-empty" wx:else>
+      <text class="text-empty__icon">📄</text>
+      <text class="text-empty__msg">正在加载文字内容…</text>
+    </view>
+  </scroll-view>
+
+  <!-- ── 播放控制区 ─────────────────────────────── -->
+  <view class="player safe-bottom">
+
+    <!-- TTS 合成进度条（loading 状态） -->
+    <view class="tts-progress-wrap" wx:if="{{playStatus === 'loading'}}">
+      <view class="tts-progress-track">
+        <view
+          class="tts-progress-fill"
+          style="width: {{ttsProgress}}%"
+        ></view>
+      </view>
+      <text class="tts-progress-label">语音合成中 {{ttsProgress}}%</text>
+    </view>
+
+    <!-- 播放进度条（playing / finished 状态） -->
+    <view
+      class="audio-progress-wrap"
+      wx:if="{{playStatus === 'playing' || playStatus === 'finished'}}"
+    >
+      <view class="audio-progress-track">
+        <view
+          class="audio-progress-fill"
+          style="width: {{duration > 0 ? (currentTime / duration * 100) : 0}}%"
+        ></view>
+      </view>
+      <view class="audio-time-row">
+        <text class="audio-time">{{currentTimeLabel}}</text>
+        <text class="audio-time">{{durationLabel}}</text>
+      </view>
+    </view>
+
+    <!-- 错误提示 -->
+    <text
+      class="error-tip"
+      wx:if="{{playStatus === 'error' && errorMsg}}"
+    >⚠️ {{errorMsg}}</text>
+
+    <!-- 播放/暂停/合成 主按钮 -->
+    <button
+      class="btn-play btn-play--{{playStatus}}"
+      bindtap="onTapPlay"
+      disabled="{{playStatus === 'loading'}}"
+      hover-class="btn-play--hover"
+    >
+      <!-- idle: 朗读 -->
+      <block wx:if="{{playStatus === 'idle'}}">
+        <text class="btn-play__icon">🔊</text>
+        <text>朗读</text>
+      </block>
+
+      <!-- loading: 合成中 -->
+      <block wx:elif="{{playStatus === 'loading'}}">
+        <text class="btn-play__icon spin">⚙️</text>
+        <text>合成中…</text>
+      </block>
+
+      <!-- playing: 暂停 -->
+      <block wx:elif="{{playStatus === 'playing'}}">
+        <text class="btn-play__icon">⏸</text>
+        <text>暂停</text>
+      </block>
+
+      <!-- finished: 重播 -->
+      <block wx:elif="{{playStatus === 'finished'}}">
+        <text class="btn-play__icon">🔄</text>
+        <text>重新朗读</text>
+      </block>
+
+      <!-- error: 重试 -->
+      <block wx:elif="{{playStatus === 'error'}}">
+        <text class="btn-play__icon">🔁</text>
+        <text>重试</text>
+      </block>
+    </button>
+
+    <!-- 重播按钮（playing 时额外显示） -->
+    <button
+      wx:if="{{playStatus === 'playing' && audioPath}}"
+      class="btn-replay"
+      bindtap="onTapReplay"
+      hover-class="btn-replay--hover"
+    >
+      <text>↩ 从头朗读</text>
+    </button>
+
+  </view>
+
+</view>

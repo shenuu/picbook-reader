@@ -3,154 +3,174 @@
  * @description 绘本朗读助手 - OCR 识别服务
  *
  * 职责：
- *  1. 将压缩后的图片上传到 BFF /api/ocr 接口，获取识别文字
- *  2. 请求超时控制（默认 5 秒）
- *  3. 失败自动重试（最多 2 次，指数退避：1s / 2s）
- *  4. 支持外部传入进度回调（上传进度百分比）
- *  5. 支持手动取消请求（abort）
+ *  1. 将本地图片文件读取并编码为 Base64
+ *  2. 调用 BFF /api/ocr 接口（BFF 再中转到腾讯云 GeneralBasicOCR）
+ *  3. 2 次指数退避重试（500ms → 1000ms），超时 5 秒
+ *  4. 返回结构化识别结果 { text, words }
  *
- * 接口约定（BFF /api/ocr）：
- *  - Method: POST multipart/form-data
- *  - Field:  image (binary)
- *  - 响应:   { code: 0, data: { text: string }, msg: string }
+ * BFF 接口契约：
+ *   POST /api/ocr
+ *   Body: { imageBase64: string }
+ *   Response: {
+ *     code: 0,
+ *     data: {
+ *       text: string,              // 全文（换行符分隔）
+ *       words: [{
+ *         text: string,
+ *         confidence: number,      // 0-100
+ *         boundingBox: { x, y, w, h }  // 归一化坐标 0-1
+ *       }]
+ *     }
+ *   }
  *
  * @author Jamie Park
  * @version 0.1.0
  */
 
-/** BFF 接口基础路径，从小程序全局配置中读取 */
-const BASE_URL = getApp().globalData?.bffBaseUrl || 'https://api.example.com';
-
-/** OCR 接口超时时间（毫秒） */
-const OCR_TIMEOUT_MS = 5000;
-
-/** 最大重试次数 */
-const MAX_RETRY = 2;
-
-/** 指数退避基础时间（毫秒） */
-const RETRY_BASE_DELAY_MS = 1000;
-
-// ─────────────────────────────────────────────────────────────────
-//  公开接口
-// ─────────────────────────────────────────────────────────────────
+const {
+  BFF_BASE_URL,
+  OCR_TIMEOUT_MS,
+  OCR_MAX_RETRY,
+  OCR_RETRY_BASE_DELAY_MS,
+} = require('../config');
 
 /**
- * 识别图片中的文字
+ * 对图片文件进行 OCR 识别
+ * 内部自动重试（最多 OCR_MAX_RETRY 次，指数退避）
  *
- * @param {string} imagePath          - 本地图片路径（压缩后）
+ * @param {string} filePath                 - 本地或临时图片路径
  * @param {object} [options]
- * @param {Function} [options.onProgress] - 上传进度回调 (percent: number) => void
- * @returns {Promise<{ text: string }>}   - OCR 结果
+ * @param {Function} [options.onProgress]   - 进度回调 (percent: number) => void，
+ *                                            供 guide 页更新进度条
+ * @returns {Promise<{ text: string, words: Array }>}
  *
  * @example
- *   const { text } = await ocrService.recognize('/tmp/img.jpg');
+ *   const result = await ocrService.recognize('/tmp/xxx.jpg');
+ *   console.log(result.text); // "床前明月光\n疑是地上霜"
  */
-async function recognize(imagePath, options = {}) {
+async function recognize(filePath, options = {}) {
   const { onProgress } = options;
+  if (typeof onProgress === 'function') onProgress(5);
 
+  // Step 1: Base64 编码
+  let imageBase64;
+  try {
+    imageBase64 = await _readFileAsBase64(filePath);
+  } catch (err) {
+    throw new Error('图片读取失败: ' + err.message);
+  }
+
+  if (typeof onProgress === 'function') onProgress(20);
+
+  // Step 2: 带重试的 OCR 请求
   let lastError;
-  for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+  for (let attempt = 0; attempt <= OCR_MAX_RETRY; attempt++) {
     if (attempt > 0) {
-      // 指数退避等待
-      await _delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
-      console.info(`[OCR] 第 ${attempt} 次重试...`);
+      // 指数退避：500ms → 1000ms
+      await _delay(OCR_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+      console.info(`[OCR] 第 ${attempt} 次重试…`);
     }
     try {
-      const result = await _uploadWithTimeout(imagePath, onProgress);
-      return result;
+      const data = await _callOcrBFF(imageBase64);
+      if (typeof onProgress === 'function') onProgress(100);
+      return data;
     } catch (err) {
       lastError = err;
-      console.warn(`[OCR] 第 ${attempt + 1} 次请求失败:`, err.message);
+      console.warn(`[OCR] 第 ${attempt + 1} 次识别失败:`, err.message);
     }
   }
 
-  // 所有重试用尽
-  throw new Error(`OCR 识别失败（已重试 ${MAX_RETRY} 次）: ${lastError?.message}`);
+  throw new Error(`OCR 识别失败（已重试 ${OCR_MAX_RETRY} 次）: ${lastError?.message}`);
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  内部实现
+//  内部：Base64 编码
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * 带超时控制的图片上传请求
- * 使用 wx.uploadFile + Promise.race 实现超时竞争
+ * 将本地文件读取为 Base64 字符串（不含 data:image/xxx;base64, 前缀）
  *
- * @param {string} imagePath
- * @param {Function|undefined} onProgress
- * @returns {Promise<{ text: string }>}
+ * @param {string} filePath - 本地文件路径（wx.env.USER_DATA_PATH 下，或 tmpXXX）
+ * @returns {Promise<string>} - Base64 字符串
  * @private
  */
-function _uploadWithTimeout(imagePath, onProgress) {
-  return Promise.race([
-    _doUpload(imagePath, onProgress),
-    _timeoutPromise(OCR_TIMEOUT_MS),
-  ]);
-}
-
-/**
- * 执行实际的 wx.uploadFile 上传
- *
- * @param {string} imagePath
- * @param {Function|undefined} onProgress
- * @returns {Promise<{ text: string }>}
- * @private
- */
-function _doUpload(imagePath, onProgress) {
+function _readFileAsBase64(filePath) {
   return new Promise((resolve, reject) => {
-    // TODO: 从 getApp().globalData 或 storage 读取 authToken 并附加到 header
-    const uploadTask = wx.uploadFile({
-      url: `${BASE_URL}/api/ocr`,
-      filePath: imagePath,
-      name: 'image',
-      header: {
-        // 'Authorization': `Bearer ${token}`,
-        // 'X-App-Version': '1.0.0',
-      },
-      formData: {
-        // TODO: 可附加额外参数，如 lang: 'zh-CN'
-      },
-      success: (res) => {
-        try {
-          // wx.uploadFile 的 data 是字符串，需手动 parse
-          const body = JSON.parse(res.data);
-          if (body.code !== 0) {
-            reject(new Error(body.msg || 'OCR 服务错误'));
-            return;
-          }
-          resolve({ text: body.data.text });
-        } catch (parseErr) {
-          reject(new Error('OCR 响应解析失败: ' + parseErr.message));
-        }
-      },
-      fail: (err) => {
-        reject(new Error('上传失败: ' + err.errMsg));
-      },
+    wx.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (res) => resolve(res.data),
+      fail: (err) => reject(new Error('文件读取错误: ' + err.errMsg)),
     });
-
-    // 监听上传进度
-    if (typeof onProgress === 'function') {
-      uploadTask.onProgressUpdate((progressEvent) => {
-        // progressEvent.progress: 0-100
-        // 上传阶段占整体进度的 10-80%，留头尾给压缩和解析
-        const mapped = 10 + Math.floor(progressEvent.progress * 0.7);
-        onProgress(mapped);
-      });
-    }
   });
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  内部：调用 BFF
+// ─────────────────────────────────────────────────────────────────
+
 /**
- * 生成一个在指定毫秒后 reject 的 Promise（用于超时竞争）
- * @param {number} ms
- * @returns {Promise<never>}
+ * 发起 OCR 请求到 BFF，超时 OCR_TIMEOUT_MS
+ *
+ * @param {string} imageBase64 - 图片 Base64（无前缀）
+ * @returns {Promise<{ text: string, words: Array }>}
  * @private
  */
-function _timeoutPromise(ms) {
-  return new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`OCR 请求超时（${ms}ms）`)), ms)
-  );
+function _callOcrBFF(imageBase64) {
+  return new Promise((resolve, reject) => {
+    // wx.request 没有内置 abort，用 timer + done 标志模拟超时
+    let settled = false;
+    const done = (result) => { if (!settled) { settled = true; resolve(result); } };
+    const fail = (err)   => { if (!settled) { settled = true; reject(err); } };
+
+    const timeoutTimer = setTimeout(() => {
+      fail(new Error(`OCR 请求超时（${OCR_TIMEOUT_MS}ms）`));
+    }, OCR_TIMEOUT_MS);
+
+    wx.request({
+      url: `${BFF_BASE_URL}/api/ocr`,
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json',
+      },
+      data: { imageBase64 },
+      timeout: OCR_TIMEOUT_MS,
+      success: (res) => {
+        clearTimeout(timeoutTimer);
+        if (settled) return;
+
+        if (res.statusCode !== 200) {
+          fail(new Error(`HTTP ${res.statusCode}: ${JSON.stringify(res.data)}`));
+          return;
+        }
+
+        const body = res.data;
+        if (body?.code !== 0) {
+          fail(new Error(`BFF OCR 错误 code=${body?.code}: ${body?.message}`));
+          return;
+        }
+
+        const { text, words = [] } = body.data;
+
+        if (!text || !text.trim()) {
+          // 识别内容为空通常代表图片中没有文字，不触发重试
+          fail(Object.assign(new Error('OCR 返回内容为空，请确认图片中有文字'), { noRetry: true }));
+          return;
+        }
+
+        done({ text, words });
+      },
+      fail: (err) => {
+        clearTimeout(timeoutTimer);
+        fail(new Error('网络请求失败: ' + err.errMsg));
+      },
+    });
+  });
 }
+
+// ─────────────────────────────────────────────────────────────────
+//  工具
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * 延迟工具

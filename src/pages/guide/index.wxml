@@ -1,0 +1,137 @@
+<!--
+  @file pages/guide/index.wxml
+  @description 绘本朗读助手 - 拍照引导页模板
+
+  状态驱动 UI（status 枚举）：
+  ┌──────────────┬────────────────────────────────────────────────┐
+  │ status       │ 显示内容                                        │
+  ├──────────────┼────────────────────────────────────────────────┤
+  │ idle         │ 引导说明 + 「拍照/选图」按钮                     │
+  │ choosing     │ 系统相机/相册（wx.chooseMedia 弹出，页面无变化） │
+  │ compressing  │ Loading + 「正在压缩图片…」                      │
+  │ hashing      │ Loading + 「计算图片指纹…」                      │
+  │ recognizing  │ 图片预览 + 进度条 + 「识别中 xx%」               │
+  │ done         │ 成功动效（短暂显示后自动跳转）                    │
+  │ error        │ 错误提示 + 「重新拍照」按钮                       │
+  └──────────────┴────────────────────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- ── 页面标题 ────────────────────────────────── -->
+  <view class="page-header">
+    <text class="page-header__title">拍照识别</text>
+    <text class="page-header__subtitle">将绘本页面对准框内，点击拍照</text>
+  </view>
+
+  <!-- ── 图片预览区（有图片时显示） ─────────────── -->
+  <view class="preview-area">
+
+    <!-- 空状态：引导图示 -->
+    <view
+      class="empty-guide"
+      wx:if="{{status === 'idle'}}"
+    >
+      <view class="empty-guide__frame">
+        <text class="empty-guide__icon">📸</text>
+        <text class="empty-guide__tips">将绘本页面放在光线充足处</text>
+        <text class="empty-guide__tips">保持页面平整、文字清晰</text>
+      </view>
+    </view>
+
+    <!-- 图片预览（压缩/识别中都显示） -->
+    <block wx:if="{{imagePath && status !== 'idle' && status !== 'error'}}">
+      <image
+        class="preview-image"
+        src="{{compressedPath || imagePath}}"
+        mode="aspectFit"
+      />
+
+      <!-- 识别中：进度条覆盖层 -->
+      <view
+        class="progress-overlay"
+        wx:if="{{status === 'recognizing' || status === 'compressing' || status === 'hashing'}}"
+      >
+        <view class="progress-panel">
+          <!-- 旋转 Loading 图标 -->
+          <view class="progress-panel__spinner spin">⚙️</view>
+
+          <!-- 状态文字 -->
+          <text class="progress-panel__label">
+            {{status === 'compressing' ? '正在压缩图片…'
+             : status === 'hashing'    ? '计算图片指纹…'
+             :                          '识别中 ' + progress + '%'}}
+          </text>
+
+          <!-- 进度条（仅识别阶段显示） -->
+          <view
+            class="progress-bar-wrap"
+            wx:if="{{status === 'recognizing'}}"
+          >
+            <view
+              class="progress-bar-fill"
+              style="width: {{progress}}%"
+            ></view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 识别成功动效 -->
+      <view class="success-overlay" wx:if="{{status === 'done'}}">
+        <text class="success-overlay__icon">✅</text>
+        <text class="success-overlay__text">识别成功！</text>
+      </view>
+    </block>
+
+    <!-- 错误状态 -->
+    <view class="error-panel" wx:if="{{status === 'error'}}">
+      <text class="error-panel__icon">⚠️</text>
+      <text class="error-panel__msg">{{errorMsg}}</text>
+    </view>
+
+  </view>
+
+  <!-- ── 底部操作区 ──────────────────────────────── -->
+  <view class="bottom-actions safe-bottom">
+
+    <!-- idle / error：展示主操作按钮 -->
+    <block wx:if="{{status === 'idle' || status === 'error'}}">
+      <button
+        class="btn-primary btn-shoot"
+        bindtap="onTapChooseImage"
+        hover-class="btn-primary--hover"
+      >
+        <text class="btn-shoot__icon">📷</text>
+        <text>{{status === 'error' ? '重新拍照' : '拍照 / 从相册选图'}}</text>
+      </button>
+    </block>
+
+    <!-- 处理中：禁用按钮 -->
+    <block wx:if="{{status !== 'idle' && status !== 'error' && status !== 'done'}}">
+      <button class="btn-primary btn-shoot btn-shoot--disabled" disabled>
+        <text class="spin">⚙️</text>
+        <text>
+          {{status === 'compressing' ? '正在压缩…'
+           : status === 'hashing'    ? '计算指纹…'
+           :                          '识别中 ' + progress + '%'}}
+        </text>
+      </button>
+    </block>
+
+    <!-- 识别完成（done 状态自动跳转，此按钮几乎不显示） -->
+    <block wx:if="{{status === 'done'}}">
+      <button class="btn-primary btn-shoot" disabled>
+        <text>✅ 识别完成，正在跳转…</text>
+      </button>
+    </block>
+
+    <!-- 提示文字 -->
+    <text class="tip-text" wx:if="{{status === 'idle'}}">
+      支持 JPG / PNG · 自动压缩至 500 KB 以内
+    </text>
+
+  </view>
+
+</view>

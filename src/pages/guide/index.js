@@ -4,7 +4,7 @@
  *
  * 职责：
  *  1. 引导用户拍摄绘本页面（使用 wx.chooseMedia）
- *  2. 对选取图片进行压缩（wx.compressImage，目标 ≤ 500 KB）
+ *  2. 对选取图片进行压缩（imageUtils.compressToTarget，目标 ≤ 500 KB）
  *  3. 计算图片 XOR Hash 指纹，用于命中缓存
  *  4. 检查缓存命中 → 命中则直接跳转结果页；未命中则调用 OCR 服务
  *  5. 上传期间展示进度/加载状态
@@ -19,6 +19,7 @@
  *  - services/cache.service.js  缓存读取
  *  - utils/image.js             压缩 & 指纹
  *  - utils/network.js           离线检测
+ *  - src/config.js              IMAGE_TARGET_SIZE_BYTES
  *
  * @author Jamie Park
  * @version 0.1.0
@@ -28,12 +29,10 @@ const ocrService = require('../../services/ocr.service');
 const cacheService = require('../../services/cache.service');
 const imageUtils = require('../../utils/image');
 const network = require('../../utils/network');
+const { IMAGE_TARGET_SIZE_BYTES } = require('../../config');
 
-/** 拍照/选图时允许的最大文件数 */
+/** 拍照/选图时允许的最大文件数（单次只处理 1 页） */
 const MAX_MEDIA_COUNT = 1;
-
-/** 压缩目标大小（字节），约 500 KB */
-const TARGET_COMPRESS_SIZE = 500 * 1024;
 
 Page({
 
@@ -62,12 +61,24 @@ Page({
   //  生命周期
   // ─────────────────────────────────────────────
 
+  /**
+   * 页面加载：记录传入的上下文参数（如 bookId，当前 MVP 暂不使用）
+   * @param {object} options - 页面参数
+   */
   onLoad(options) {
-    // TODO: 可从 options 接收 bookId 等上下文参数
+    // 扩展点：可从 options 接收 bookId 等参数，用于绑定书目记录
+    if (options.bookId) {
+      console.info('[Guide] 关联书目 bookId:', options.bookId);
+    }
   },
 
+  /**
+   * 页面卸载：若有正在进行的 OCR 请求，取消（释放网络资源）
+   */
   onUnload() {
-    // TODO: 若有正在进行的 OCR 请求，调用 ocrService.abort() 取消
+    // ocrService 目前通过超时+重试处理，无显式 abort；
+    // 若后续升级为 AbortController，在此调用 ocrService.abort()
+    network.clearQueue('页面已卸载');
   },
 
   // ─────────────────────────────────────────────
@@ -90,43 +101,47 @@ Page({
 
       this.setData({ imagePath: tempPath, status: 'compressing', progress: 0 });
 
-      // Step 1: 压缩图片
+      // Step 1: 压缩图片（二分法搜索最优 quality，目标 ≤ IMAGE_TARGET_SIZE_BYTES）
       const compressedPath = await this._compressImage(tempPath);
       this.setData({ compressedPath, status: 'hashing' });
 
-      // Step 2: 计算指纹
+      // Step 2: 计算 XOR 指纹（采样 128 字节，O(fileSize) 一次读取）
       const imageHash = await this._calcImageHash(compressedPath);
       this.setData({ imageHash });
 
-      // Step 3: 检查缓存
+      // Step 3: 检查 LRU 缓存
       const cached = await cacheService.getPage(imageHash);
       if (cached) {
         console.info('[Guide] 缓存命中，hash =', imageHash);
+        this.setData({ status: 'done', progress: 100 });
         this._navigateToResult({ fromCache: true, hash: imageHash });
         return;
       }
 
-      // Step 4: 离线检查
+      // Step 4: 离线检查（缓存未命中时才需要网络）
       if (!network.isOnline()) {
         this._setError('当前无网络，且未找到缓存，请联网后重试');
         return;
       }
 
-      // Step 5: OCR 识别
+      // Step 5: OCR 识别（含 2 次指数退避重试）
       this.setData({ status: 'recognizing', progress: 10 });
       const ocrResult = await ocrService.recognize(compressedPath, {
         onProgress: (pct) => this.setData({ progress: pct }),
       });
 
-      // Step 6: 写入缓存
+      // Step 6: 将 OCR 结果写入缓存（audioPath 留空，TTS 完成后由结果页补写）
       await cacheService.setPage(imageHash, {
         text: ocrResult.text,
         imagePath: compressedPath,
-        // audioPath 在结果页 TTS 完成后补充
       });
 
       this.setData({ status: 'done', progress: 100 });
-      this._navigateToResult({ fromCache: false, hash: imageHash, text: ocrResult.text });
+      this._navigateToResult({
+        fromCache: false,
+        hash: imageHash,
+        text: ocrResult.text,
+      });
 
     } catch (err) {
       console.error('[Guide] 处理流程出错', err);
@@ -170,27 +185,27 @@ Page({
   },
 
   /**
-   * 压缩图片到目标大小
-   * 内部调用 imageUtils.compressToTarget，该工具会迭代调整 quality
+   * 压缩图片到目标大小（二分搜索最优 quality，最多 6 次迭代）
+   * 若原始图片已满足大小要求，则跳过压缩直接返回原路径
+   *
    * @param {string} src - 原始临时路径
    * @returns {Promise<string>} 压缩后的临时路径
    * @private
    */
   async _compressImage(src) {
-    // TODO: return imageUtils.compressToTarget(src, TARGET_COMPRESS_SIZE);
-    // 占位：直接返回原路径（完整实现需替换）
-    return src;
+    return imageUtils.compressToTarget(src, IMAGE_TARGET_SIZE_BYTES);
   },
 
   /**
    * 计算图片 XOR Hash 指纹
+   * 均匀采样 128 字节，分 16 组 XOR，输出 32 位 16 进制字符串
+   *
    * @param {string} filePath - 图片路径
    * @returns {Promise<string>} 16进制 hash 字符串
    * @private
    */
   async _calcImageHash(filePath) {
-    // TODO: return imageUtils.calcXorHash(filePath);
-    return 'placeholder_hash';
+    return imageUtils.calcXorHash(filePath);
   },
 
   // ─────────────────────────────────────────────
@@ -199,26 +214,28 @@ Page({
 
   /**
    * 跳转结果页，通过 URL 参数传递必要信息
-   * @param {{ fromCache: boolean, hash: string, text?: string }} params
+   * 结果页从 cacheService 读取 text，无需在 URL 中传递完整文字（可能过长）
+   *
+   * @param {{ fromCache: boolean, hash: string }} params
    * @private
    */
-  _navigateToResult({ fromCache, hash, text }) {
+  _navigateToResult({ fromCache, hash }) {
     const query = `hash=${encodeURIComponent(hash)}&fromCache=${fromCache}`;
     wx.navigateTo({ url: `/pages/result/index?${query}` });
   },
 
   /**
-   * 设置错误状态
+   * 设置错误状态，同时用 Toast 展示给用户
    * @param {string} msg
    * @private
    */
   _setError(msg) {
-    this.setData({ status: 'error', errorMsg: msg });
+    this.setData({ status: 'error', errorMsg: msg, progress: 0 });
     wx.showToast({ title: msg, icon: 'none', duration: 3000 });
   },
 
   /**
-   * 用户点击"重新拍照"按钮，重置状态
+   * 用户点击"重新拍照"按钮，重置状态机回到初始 idle
    */
   onTapReset() {
     this.setData({

@@ -1,0 +1,114 @@
+<!--
+  @file pages/home/index.wxml
+  @description 绘本朗读助手 - 首页模板
+
+  布局：
+  ┌─────────────────────────────────┐
+  │  顶部离线 Toast（网络断开时滑入） │
+  ├─────────────────────────────────┤
+  │  大标题 + 副标题                  │
+  ├─────────────────────────────────┤
+  │  插画（绘本 + 麦克风图标区域）    │
+  ├─────────────────────────────────┤
+  │  缓存状态卡片（count / max）      │
+  ├─────────────────────────────────┤
+  │  「开始拍照」主按钮               │
+  │  「缓存管理」次级按钮             │
+  └─────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- ── 离线 Toast ─────────────────────────────── -->
+  <view class="offline-toast {{!isOnline ? 'visible' : ''}}">
+    <text class="offline-toast__icon">📶</text>
+    <view class="offline-toast__content">
+      <text class="offline-toast__title">无网络连接</text>
+      <text class="offline-toast__desc">仅可朗读已缓存的绘本页</text>
+    </view>
+  </view>
+
+  <!-- ── 主内容区 ───────────────────────────────── -->
+  <scroll-view class="content" scroll-y>
+
+    <!-- 标题区 -->
+    <view class="hero">
+      <view class="hero__emoji" aria-hidden="true">📖</view>
+      <text class="hero__title">绘本朗读助手</text>
+      <text class="hero__subtitle">拍张绘本，让故事「说话」✨</text>
+    </view>
+
+    <!-- 缓存状态卡片 -->
+    <view class="cache-card card">
+      <!-- 骨架屏：加载中 -->
+      <block wx:if="{{loadingStats}}">
+        <view class="cache-card__skeleton">
+          <view class="skeleton-bar skeleton-bar--short"></view>
+          <view class="skeleton-bar skeleton-bar--long"></view>
+        </view>
+      </block>
+
+      <!-- 已加载 -->
+      <block wx:else>
+        <view class="cache-card__header">
+          <text class="cache-card__title">缓存绘本页</text>
+          <text class="cache-card__badge {{cacheStats.count > 0 ? 'badge--active' : 'badge--empty'}}">
+            {{cacheStats.count}}/{{cacheStats.maxCount}}
+          </text>
+        </view>
+
+        <!-- 进度条 -->
+        <view class="cache-progress">
+          <view
+            class="cache-progress__bar"
+            style="width: {{cacheStats.maxCount > 0 ? (cacheStats.count / cacheStats.maxCount * 100) : 0}}%"
+          ></view>
+        </view>
+
+        <text class="cache-card__desc">
+          {{cacheStats.count > 0
+            ? '已缓存 ' + cacheStats.count + ' 页，离线也能朗读哦～'
+            : '尚未缓存任何绘本页，先去拍照识别吧～'}}
+        </text>
+      </block>
+    </view>
+
+    <!-- 操作按钮区 -->
+    <view class="actions">
+      <!-- 主按钮：开始拍照 -->
+      <button
+        class="btn-primary btn-start"
+        bindtap="onTapStartScan"
+        hover-class="btn-primary--hover"
+      >
+        <text class="btn-start__icon">📷</text>
+        <text>开始拍照识别</text>
+      </button>
+
+      <!-- 次要按钮：缓存管理（有缓存时才显示） -->
+      <button
+        wx:if="{{cacheStats.count > 0}}"
+        class="btn-secondary btn-cache"
+        bindtap="onTapCacheManager"
+        hover-class="btn-secondary--hover"
+      >
+        <text class="btn-cache__icon">🗂️</text>
+        <text>缓存管理（{{cacheStats.count}} 页）</text>
+      </button>
+    </view>
+
+    <!-- 底部提示 -->
+    <view class="footer-hint">
+      <text class="footer-hint__text">
+        支持拍照或从相册选图 · 自动识别文字 · 流畅朗读
+      </text>
+    </view>
+
+    <!-- 安全区底部补白 -->
+    <view class="safe-bottom-spacer"></view>
+
+  </scroll-view>
+
+</view>

@@ -1,0 +1,234 @@
+/**
+ * @file pages/home/index.wxss
+ * @description 首页样式（继承 app.wxss 的 Design Tokens）
+ *
+ * @author Jamie Park
+ */
+
+/* ── 页面容器 ─────────────────────────────────────────── */
+
+.page {
+  min-height: 100vh;
+  background-color: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  padding: var(--space-6) var(--space-5) 0;
+}
+
+/* ── Hero 标题区 ─────────────────────────────────────── */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-8) 0 var(--space-6);
+}
+
+.hero__emoji {
+  font-size: 120rpx;
+  margin-bottom: var(--space-4);
+  /* 弹跳动画 */
+  animation: bounceIn 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero__title {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: 4rpx;
+}
+
+.hero__subtitle {
+  margin-top: var(--space-2);
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.6;
+}
+
+@keyframes bounceIn {
+  0%   { transform: scale(0.3); opacity: 0; }
+  60%  { transform: scale(1.1); }
+  80%  { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── 缓存状态卡片 ──────────────────────────────────────── */
+
+.cache-card {
+  margin-top: var(--space-4);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.cache-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.cache-card__title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.cache-card__badge {
+  font-size: var(--text-sm);
+  font-family: var(--font-family-number);
+  font-weight: 700;
+  padding: 4rpx 16rpx;
+  border-radius: var(--radius-full);
+}
+
+.badge--active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.badge--empty {
+  background-color: var(--color-bg-muted);
+  color: var(--color-text-disabled);
+}
+
+/* 进度条 */
+.cache-progress {
+  height: 12rpx;
+  background-color: var(--color-bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+
+.cache-progress__bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-normal) ease-out;
+  min-width: 0;
+}
+
+.cache-card__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* 骨架屏 */
+.cache-card__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skeleton-bar {
+  height: 28rpx;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-bar--short { width: 40%; }
+.skeleton-bar--long  { width: 80%; }
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 操作按钮区 ──────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding: 0 var(--space-2);
+}
+
+/* 主按钮增强 */
+.btn-start {
+  height: 104rpx;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-full) !important;
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-primary) !important;
+  border: none !important;
+}
+
+.btn-start::after {
+  /* 清除微信小程序 button 默认边框 */
+  border: none;
+}
+
+.btn-start--hover {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.btn-start__icon {
+  font-size: 48rpx;
+}
+
+/* 次要按钮增强 */
+.btn-cache {
+  height: 88rpx;
+  font-size: var(--text-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-full) !important;
+  background-color: transparent !important;
+  color: var(--color-primary) !important;
+  border: 2rpx solid var(--color-primary) !important;
+}
+
+.btn-cache::after {
+  border: none;
+}
+
+.btn-cache--hover {
+  background-color: var(--color-primary-light) !important;
+}
+
+.btn-cache__icon {
+  font-size: 36rpx;
+}
+
+/* ── 底部提示 ─────────────────────────────────────────── */
+
+.footer-hint {
+  margin-top: var(--space-6);
+  display: flex;
+  justify-content: center;
+  padding-bottom: var(--space-4);
+}
+
+.footer-hint__text {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* 安全区底部补白 */
+.safe-bottom-spacer {
+  height: constant(safe-area-inset-bottom);
+  height: env(safe-area-inset-bottom);
+  padding-bottom: 40rpx;
+}
