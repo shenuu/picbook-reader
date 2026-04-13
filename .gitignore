@@ -12,6 +12,9 @@ yarn.lock
 .env.local
 .env.*.local
 
+# 凭证文档（包含密钥，绝不提交）
+docs/credentials.md
+
 # 本地缓存
 .cache/
 *.cache
