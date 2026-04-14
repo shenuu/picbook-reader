@@ -1,0 +1,111 @@
+<!--
+  @file pages/offline/index.wxml
+  @description 离线降级页模板
+
+  布局（儿童友好风格）：
+  ┌─────────────────────────────────────────┐
+  │                                         │
+  │        🦊（儿童友好大图标）              │
+  │     哎呀，现在没有网络连接…              │
+  │     但没关系！你可以重播已有绘本         │
+  │                                         │
+  │  ─────── 最近朗读过的绘本 ──────────    │
+  │  ┌─────────────────────────────────┐   │
+  │  │ 🎵 文字预览…              5分钟前│  │
+  │  └─────────────────────────────────┘  │
+  │  ...（最多5条）                         │
+  │                                         │
+  │       [ 🔍 检测网络连接 ]               │
+  │                                         │
+  └─────────────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- ── 顶部离线提示区 ─────────────────────────── -->
+  <view class="hero">
+    <!-- 儿童友好大图标 -->
+    <view class="hero__icon-wrap">
+      <text class="hero__icon">🦊</text>
+      <!-- 装饰小云朵 -->
+      <text class="hero__deco hero__deco--l">☁️</text>
+      <text class="hero__deco hero__deco--r">☁️</text>
+    </view>
+
+    <text class="hero__title">哎呀，没有网络啦</text>
+    <text class="hero__sub">
+      不用担心！我帮你找到了之前读过的绘本，可以直接重播哦 🎶
+    </text>
+  </view>
+
+  <!-- ── 最近朗读列表 ───────────────────────────── -->
+  <view wx:if="{{hasCache}}">
+    <view class="section-title">最近朗读过的绘本</view>
+
+    <view class="entry-list">
+      <view
+        wx:for="{{recentEntries}}"
+        wx:key="pageHash"
+        class="entry-card"
+        data-hash="{{item.pageHash}}"
+        data-text="{{item.text}}"
+        bindtap="onTapReplay"
+      >
+        <!-- 左图标 -->
+        <view class="entry-icon">
+          <text wx:if="{{item.hasAudio}}">🎵</text>
+          <text wx:else>📖</text>
+        </view>
+
+        <!-- 文字内容 -->
+        <view class="entry-body">
+          <text class="entry-preview">
+            {{item.preview}}{{item.text.length > 30 ? '…' : ''}}
+          </text>
+          <text class="entry-time">{{item.timeLabel}}</text>
+        </view>
+
+        <!-- 播放箭头 -->
+        <text class="entry-arrow">▶</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- ── 无缓存时的提示 ────────────────────────── -->
+  <view wx:else class="no-cache-wrap">
+    <text class="no-cache-icon">📭</text>
+    <text class="no-cache-msg">暂无缓存绘本</text>
+    <text class="no-cache-hint">
+      联网后识别绘本，内容会自动缓存，下次即可离线重播
+    </text>
+  </view>
+
+  <!-- ── 底部检测网络按钮 ───────────────────────── -->
+  <view class="footer safe-bottom">
+    <button
+      class="btn-check btn-check--{{status}}"
+      bindtap="onTapCheckNetwork"
+      disabled="{{status === 'checking' || status === 'online'}}"
+      hover-class="btn-check--hover"
+    >
+      <!-- 检测中 -->
+      <block wx:if="{{status === 'checking'}}">
+        <text class="btn-check__icon spin">⚙️</text>
+        <text>检测中…</text>
+      </block>
+      <!-- 已联网 -->
+      <block wx:elif="{{status === 'online'}}">
+        <text class="btn-check__icon">✅</text>
+        <text>网络已连接！</text>
+      </block>
+      <!-- 默认：离线状态 -->
+      <block wx:else>
+        <text class="btn-check__icon">🔍</text>
+        <text>检测网络连接</text>
+      </block>
+    </button>
+  </view>
+
+</view>

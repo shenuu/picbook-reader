@@ -146,7 +146,7 @@ Page({
       });
       return;
     }
-    wx.navigateTo({ url: '/pages/guide/index' });
+    wx.navigateTo({ url: '/src/pages/guide/index' });
   },
 
   /**

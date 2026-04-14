@@ -77,6 +77,11 @@ async function recognize(filePath, options = {}) {
     } catch (err) {
       lastError = err;
       console.warn(`[OCR] 第 ${attempt + 1} 次识别失败:`, err.message);
+      // P1-7: 4xx 客户端错误（noRetry 标志）直接抛出，不再重试
+      if (err.noRetry) {
+        console.warn('[OCR] 客户端错误，跳过后续重试:', err.message);
+        throw err;
+      }
     }
   }
 
@@ -140,7 +145,15 @@ function _callOcrBFF(imageBase64) {
         if (settled) return;
 
         if (res.statusCode !== 200) {
-          fail(new Error(`HTTP ${res.statusCode}: ${JSON.stringify(res.data)}`));
+          const err = new Error(`HTTP ${res.statusCode}: ${JSON.stringify(res.data)}`);
+          /**
+           * P1-7: 4xx 客户端错误（如 400 Bad Request、413 Request Entity Too Large）
+           * 是请求本身的问题，重试也不会成功，直接标记 noRetry 跳过重试逻辑
+           */
+          if (res.statusCode >= 400 && res.statusCode < 500) {
+            err.noRetry = true;
+          }
+          fail(err);
           return;
         }
 

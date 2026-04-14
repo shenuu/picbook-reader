@@ -3,28 +3,40 @@
  * @description 绘本朗读助手 - 识别结果页
  *
  * 职责：
- *  1. 展示 OCR 识别出的文字内容
- *  2. 提供"朗读"按钮，触发 TTS 播放（讯飞流式 WebSocket → 本地 MP3）
- *  3. 显示当前内容的缓存状态（已缓存 / 未缓存 / 保存中）
- *  4. 支持播放/暂停/重播控制
- *  5. TTS 完成后将音频路径写回缓存
+ *  1. 通过 EventChannel 接收来自 guide 页的 OCR 文字（P1-2）
+ *  2. 展示识别文字内容
+ *  3. 控制 TTS 合成与音频播放（状态机：idle → loading → playing → finished/error）
+ *  4. Phase 2: 声音切换面板（底部 sheet 弹窗，切换后立即重播）
  *
- * URL 参数：
- *  - hash       {string}  图片指纹，用于读取缓存
- *  - fromCache  {string}  'true'|'false'，是否来自缓存命中
+ * 已修复问题：
+ *  - P1-2: 改用 getOpenerEventChannel().on('ocrData') 接收文字，避免 URL 超 1024 字符限制
+ *  - P1-3: TTS synthesize() 支持 onPlayStart 回调，合成完开始播放时切换 PLAYING 状态
+ *           用户在合成完成后即可点击"暂停"按钮
  *
- * 依赖：
- *  - services/tts.service.js    TTS 合成与播放
- *  - services/cache.service.js  缓存读取 & 音频路径回写
- *  - utils/network.js           在线状态
+ * Phase 2 声音切换：
+ *  - 底部 sheet 弹窗（showVoiceSheet 控制显示）
+ *  - 3 个声音角色：xiaoyan（小燕）、aisjiuxu（爱思）、aisjinger（爱晶）
+ *  - 切换后立即 cancel 当前播放，用新声音重新合成
+ *
+ * 状态机：
+ *  idle       - 未开始（显示"朗读"按钮）
+ *  loading    - TTS 合成中（显示进度条，按钮禁用）
+ *  playing    - 播放中（显示"暂停"按钮，P1-3 修复）
+ *  paused     - 已暂停（显示"继续"按钮）
+ *  finished   - 播放完毕（显示"重新朗读"按钮）
+ *  error      - 出错（显示"重试"按钮）
  *
  * @author Jamie Park
- * @version 0.1.0
+ * @version 0.2.0
  */
 
-const ttsService = require('../../services/tts.service');
+const ttsService   = require('../../services/tts.service');
 const cacheService = require('../../services/cache.service');
-const network = require('../../utils/network');
+const { TTS_VOICES, DEFAULT_TTS_VOICE_ID } = require('../../config');
+
+// ─────────────────────────────────────────────────────────────────
+//  页面配置
+// ─────────────────────────────────────────────────────────────────
 
 Page({
 
@@ -32,292 +44,414 @@ Page({
   //  数据层
   // ─────────────────────────────────────────────
   data: {
-    /** 图片指纹 */
-    hash: '',
-    /** 是否来自缓存命中 */
-    fromCache: false,
-    /** OCR 识别文字 */
+    // ── OCR 数据 ──────────────────────────────
+    /** 识别到的原始文字 */
     ocrText: '',
-    /**
-     * 缓存状态
-     * none | cached | saving
-     */
+    /** 图片内容哈希（用于缓存更新） */
+    imageHash: '',
+    /** 是否来自缓存（显示"来自缓存"标签） */
+    fromCache: false,
+    /** 缓存状态：'none' | 'saving' | 'cached' */
     cacheStatus: 'none',
+
+    // ── 播放状态 ───────────────────────────────
     /**
-     * 播放状态机（4状态）
-     * idle | loading | playing | finished
-     * （另有内部的 paused 状态，可从 playing 切换，不单独在 UI 分类）
+     * 播放状态机
+     * 'idle' | 'loading' | 'playing' | 'paused' | 'finished' | 'error'
      */
     playStatus: 'idle',
-    /** TTS 合成进度（0-100） */
+    /** TTS 合成进度 0-100（loading 状态显示） */
     ttsProgress: 0,
-    /** 本地 MP3 路径（缓存时从 cacheService 获取） */
-    audioPath: '',
-    /** 播放时长（秒） */
-    duration: 0,
-    /** 当前播放位置（秒） */
-    currentTime: 0,
-    /** 格式化后的当前时间标签，如 "01:23" */
-    currentTimeLabel: '00:00',
-    /** 格式化后的总时长标签 */
-    durationLabel: '00:00',
-    /** 错误信息 */
+    /** 错误信息（error 状态显示） */
     errorMsg: '',
+
+    // ── 音频进度 ───────────────────────────────
+    /** 当前播放时间（秒） */
+    currentTime: 0,
+    /** 音频总时长（秒） */
+    duration: 0,
+    /** 当前时间格式化字符串，如 "0:12" */
+    currentTimeLabel: '0:00',
+    /** 总时长格式化字符串 */
+    durationLabel: '0:00',
+    /** 本地 MP3 文件路径 */
+    audioPath: '',
+
+    // ── Phase 2: 声音切换面板 ──────────────────
+    /** 声音选择器面板是否显示 */
+    showVoiceSheet: false,
+    /** 当前选中的声音 ID */
+    selectedVoiceId: DEFAULT_TTS_VOICE_ID,
+    /** 声音列表（来自 config.TTS_VOICES） */
+    voices: TTS_VOICES,
+    /** 当前选中的声音对象（P1-A: 避免 WXML 中 findIndex 越界） */
+    selectedVoice: null,
   },
-
-  // ─────────────────────────────────────────────
-  //  私有引用（不放进 data，避免触发不必要的 setData 代价）
-  // ─────────────────────────────────────────────
-
-  /** @type {WechatMiniprogram.InnerAudioContext} */
-  _audioCtx: null,
 
   // ─────────────────────────────────────────────
   //  生命周期
   // ─────────────────────────────────────────────
 
   /**
-   * 接收上一页传来的 hash / fromCache 参数，加载内容
-   * @param {{ hash: string, fromCache: string }} options
+   * 页面加载
+   * P1-2: 从 URL 取轻量参数，通过 EventChannel 接收 OCR 文字
+   *
+   * @param {object} options - 页面 URL 参数
+   * @param {string} options.hash      - 图片哈希，用于缓存更新
+   * @param {string} options.fromCache - '1'|'true' 表示来自缓存
    */
-  async onLoad(options) {
-    const hash = decodeURIComponent(options.hash || '');
-    const fromCache = options.fromCache === 'true';
+  onLoad(options) {
+    const { hash = '', fromCache = '' } = options;
+    const isCached = fromCache === 'true' || fromCache === '1';
 
-    this.setData({ hash, fromCache });
+    this.setData({
+      imageHash: hash,
+      fromCache: isCached,
+      cacheStatus: isCached ? 'cached' : 'none',
+    });
 
-    // 创建音频上下文（每个页面实例独立创建，不使用模块级全局变量）
-    this._audioCtx = wx.createInnerAudioContext();
-    this._setupAudioContext();
-
-    // 从缓存服务读取文字 & 音频路径
-    await this._loadPageData(hash);
+    // P1-2: 通过 EventChannel 接收 guide 页 emit 的 ocrData
+    this._receiveOcrData();
+    // P1-A: 初始化时同步 selectedVoice
+    this._syncSelectedVoice();
   },
 
   /**
-   * 页面卸载：销毁音频上下文，取消正在进行的 TTS 合成
+   * 页面卸载：释放音频资源
    */
   onUnload() {
-    // 销毁音频上下文，释放系统资源（避免后台持续占用）
-    if (this._audioCtx) {
-      this._audioCtx.destroy();
-      this._audioCtx = null;
-    }
-    // 若 TTS WebSocket 仍在合成，主动关闭
+    this._destroyAudio();
     ttsService.cancel();
   },
 
   // ─────────────────────────────────────────────
-  //  数据加载
+  //  P1-2: EventChannel 接收 OCR 数据
   // ─────────────────────────────────────────────
 
   /**
-   * 从缓存服务加载页面数据（文字 + 音频路径）
-   * @param {string} hash
+   * 通过 EventChannel 接收 guide 页传递的 ocrData
+   *
+   * 为什么改 EventChannel：
+   *  - 原 URL 传参：encodeURIComponent(text) 拼入 URL，超过 1024 字节时被微信截断
+   *  - 新 EventChannel：emit/on 方式传输 JS 对象，无大小限制
+   *
    * @private
    */
-  async _loadPageData(hash) {
+  _receiveOcrData() {
     try {
-      const page = await cacheService.getPage(hash);
-      if (page) {
-        this.setData({
-          ocrText: page.text || '',
-          audioPath: page.audioPath || '',
-          cacheStatus: 'cached',
-        });
-      } else {
-        // 缓存中无此条目（理论上不应出现，OCR完成后已写入）
-        console.warn('[Result] 缓存中未找到 hash:', hash);
-        this.setData({ cacheStatus: 'none' });
-      }
+      const eventChannel = this.getOpenerEventChannel();
+      eventChannel.on('ocrData', (data) => {
+        const { text = '', fromCache, hash } = data;
+        const updates = { ocrText: text };
+
+        if (fromCache) {
+          updates.cacheStatus = 'cached';
+        }
+        if (hash) {
+          updates.imageHash = hash;
+        }
+
+        this.setData(updates);
+        console.info('[Result] 收到 OCR 数据，文字长度:', text.length);
+      });
     } catch (err) {
-      console.error('[Result] 加载页面数据失败', err);
+      // 直接打开 result 页时无 EventChannel，非致命错误
+      console.warn('[Result] getOpenerEventChannel 不可用（可能是直接打开）:', err.message);
     }
   },
 
   // ─────────────────────────────────────────────
-  //  TTS 播放
+  //  TTS 控制
   // ─────────────────────────────────────────────
 
   /**
-   * 点击"朗读"按钮（状态机驱动）
-   *
-   * - idle / finished → 若有音频则直接播放；否则合成后再播
-   * - loading         → 忽略（合成中）
-   * - playing         → 暂停
-   * - paused          → 继续播放
-   * - error           → 重新尝试合成
+   * 点击主播放按钮
+   * 根据当前状态决定行为：
+   *  idle     → 开始合成播放
+   *  loading  → 禁用（UI 已 disabled）
+   *  playing  → 暂停
+   *  paused   → 继续
+   *  finished → 重播
+   *  error    → 重试
    */
-  async onTapPlay() {
+  onTapPlay() {
     const { playStatus, audioPath, ocrText } = this.data;
 
-    switch (playStatus) {
-      case 'playing':
-        // 暂停（未列入 4 状态 UI 枚举，但保留内部状态支持）
-        this._audioCtx.pause();
-        this.setData({ playStatus: 'idle' }); // UI 回到 idle，显示播放按钮
-        return;
-
-      case 'loading':
-        // 合成中，不响应点击
-        return;
-
-      default:
-        break;
+    if (playStatus === 'idle' || playStatus === 'error') {
+      this._startPlayback(ocrText);
+    } else if (playStatus === 'playing') {
+      this._pausePlayback();
+    } else if (playStatus === 'paused') {
+      this._resumePlayback();
+    } else if (playStatus === 'finished') {
+      this._replayFromStart();
     }
-
-    // idle / finished / error 状态：开始或重新播放
-    if (audioPath) {
-      // 已有本地音频，直接播放（支持重播）
-      this._playAudio(audioPath);
-      return;
-    }
-
-    // 需要合成语音
-    if (!network.isOnline()) {
-      this.setData({ errorMsg: '离线状态下无法合成语音', playStatus: 'error' });
-      wx.showToast({ title: '请联网后重试', icon: 'none' });
-      return;
-    }
-
-    await this._synthesizeAndPlay(ocrText);
   },
 
   /**
-   * 调用 TTS 服务合成语音，完成后播放并写入缓存
-   * @param {string} text - 待合成文本
+   * 点击"↩ 从头朗读"按钮（playing 状态时显示）
+   */
+  onTapReplay() {
+    this._replayFromStart();
+  },
+
+  /**
+   * 开始 TTS 合成并播放
+   * @param {string} text - 待合成文字
    * @private
    */
-  async _synthesizeAndPlay(text) {
+  async _startPlayback(text) {
     if (!text || !text.trim()) {
-      wx.showToast({ title: '文字内容为空，无法朗读', icon: 'none' });
+      this.setData({ playStatus: 'error', errorMsg: '识别文字为空，无法朗读' });
+      return;
+    }
+
+    // 如果有已合成的音频路径，直接播放（跳过 TTS 合成）
+    if (this.data.audioPath) {
+      this._playAudio(this.data.audioPath);
       return;
     }
 
     this.setData({ playStatus: 'loading', ttsProgress: 0, errorMsg: '' });
 
     try {
-      // 流式 TTS：BFF 签名 URL → WebSocket → 逐帧接收 Base64 → 写入本地 MP3
+      const { selectedVoiceId, voices, imageHash } = this.data;
+
+      // 找到当前选中的声音配置
+      const voiceConfig = voices.find(v => v.id === selectedVoiceId) || voices[0];
+
       const localPath = await ttsService.synthesize(text, {
         onProgress: (pct) => this.setData({ ttsProgress: pct }),
+        /**
+         * P1-3: onPlayStart 回调
+         * 合成完成、即将开始播放时，TTS Service 调用此回调
+         * 上层立即将状态切换到 'playing'，用户此时可点击"暂停"
+         * 不再等到音频加载完才切换（原来 loading → playing 延迟过长）
+         */
+        onPlayStart: () => {
+          this.setData({ playStatus: 'playing' });
+        },
+        voice: {
+          vcn: voiceConfig.vcn,
+          speed: voiceConfig.speed,
+        },
       });
 
-      // 合成完成：将音频路径持久化到缓存（下次直接播放，无需重新合成）
-      this.setData({ audioPath: localPath, cacheStatus: 'saving' });
-      await this._saveAudioToCache(localPath);
+      // 将音频路径写回缓存
+      if (imageHash) {
+        this.setData({ cacheStatus: 'saving' });
+        await cacheService.updateAudioPath(imageHash, localPath);
+        this.setData({ cacheStatus: 'cached' });
+      }
 
-      // 立即播放
+      this.setData({ audioPath: localPath });
       this._playAudio(localPath);
+
     } catch (err) {
-      console.error('[Result] TTS 合成失败', err);
-      this.setData({ playStatus: 'error', errorMsg: err.message || 'TTS 失败' });
-      wx.showToast({ title: '语音合成失败，请重试', icon: 'none' });
+      console.error('[Result] TTS 合成失败:', err.message);
+      this.setData({
+        playStatus: 'error',
+        errorMsg: err.message || 'TTS 合成失败，请重试',
+      });
     }
   },
 
   /**
-   * 将合成好的音频路径回写到缓存条目
-   * @param {string} audioPath
-   * @private
-   */
-  async _saveAudioToCache(audioPath) {
-    try {
-      await cacheService.updateAudioPath(this.data.hash, audioPath);
-      this.setData({ cacheStatus: 'cached' });
-    } catch (err) {
-      console.warn('[Result] 音频路径写回缓存失败', err);
-      this.setData({ cacheStatus: 'none' });
-    }
-  },
-
-  /**
-   * 使用 innerAudioContext 播放本地 MP3
-   * 每次调用都从头开始（seek(0)）以支持重播
-   *
-   * @param {string} filePath - 本地文件路径
+   * 使用 InnerAudioContext 播放 MP3 文件
+   * @param {string} filePath - 本地 MP3 文件路径
    * @private
    */
   _playAudio(filePath) {
-    if (!this._audioCtx) return;
-    this._audioCtx.src = filePath;
-    this._audioCtx.seek(0);
-    this._audioCtx.play();
-    this.setData({ playStatus: 'playing', currentTime: 0 });
+    // 销毁旧的 Audio 实例
+    this._destroyAudio();
+
+    const audio = wx.createInnerAudioContext();
+    audio.src = filePath;
+    audio.autoplay = false;
+
+    // 监听 canplay，首次加载成功后开始播放
+    audio.onCanplay(() => {
+      audio.play();
+    });
+
+    // 时间更新
+    audio.onTimeUpdate(() => {
+      const cur = audio.currentTime;
+      const dur = audio.duration;
+      this.setData({
+        currentTime: cur,
+        duration: dur,
+        currentTimeLabel: _formatTime(cur),
+        durationLabel: _formatTime(dur),
+      });
+    });
+
+    // 播放结束
+    audio.onEnded(() => {
+      this.setData({ playStatus: 'finished' });
+    });
+
+    // 播放出错
+    audio.onError((err) => {
+      console.error('[Result] 音频播放出错:', err);
+      this.setData({
+        playStatus: 'error',
+        errorMsg: '音频播放出错：' + (err.errMsg || JSON.stringify(err)),
+      });
+    });
+
+    this._audioCtx = audio;
+    // P1-3: 如果 onPlayStart 已将状态切换为 playing，这里保持不变
+    // 否则在此设置（兜底）
+    if (this.data.playStatus !== 'playing') {
+      this.setData({ playStatus: 'playing' });
+    }
   },
 
   /**
-   * 重播（回到起点继续播放）
-   * 仅在 finished 状态下由 UI 按钮触发
+   * 暂停播放
+   * @private
    */
-  onTapReplay() {
-    const { audioPath } = this.data;
-    if (audioPath && this._audioCtx) {
+  _pausePlayback() {
+    if (this._audioCtx) {
+      this._audioCtx.pause();
+      this.setData({ playStatus: 'paused' });
+    }
+  },
+
+  /**
+   * 继续播放
+   * @private
+   */
+  _resumePlayback() {
+    if (this._audioCtx) {
+      this._audioCtx.play();
+      this.setData({ playStatus: 'playing' });
+    }
+  },
+
+  /**
+   * 从头重播（seek 到 0 再 play）
+   * @private
+   */
+  _replayFromStart() {
+    if (this._audioCtx) {
       this._audioCtx.seek(0);
       this._audioCtx.play();
-      this.setData({ playStatus: 'playing', currentTime: 0 });
+      this.setData({ playStatus: 'playing' });
+    }
+  },
+
+  /**
+   * 销毁 InnerAudioContext，释放系统音频资源
+   * @private
+   */
+  _destroyAudio() {
+    if (this._audioCtx) {
+      try {
+        this._audioCtx.stop();
+        this._audioCtx.destroy();
+      } catch (_) {
+        // 忽略销毁时的错误
+      }
+      this._audioCtx = null;
     }
   },
 
   // ─────────────────────────────────────────────
-  //  音频上下文事件
+  //  Phase 2: 声音切换面板
   // ─────────────────────────────────────────────
 
   /**
-   * 设置 innerAudioContext 的各类回调
-   * 在 onLoad 中的 _audioCtx 创建后立即调用
+   * 点击底部声音切换按钮，显示/隐藏声音选择 Sheet
+   */
+  onTapVoiceToggle() {
+    this.setData({ showVoiceSheet: !this.data.showVoiceSheet });
+  },
+
+  /**
+   * 点击遮罩层，关闭声音选择 Sheet
+   */
+  onTapVoiceSheetMask() {
+    this.setData({ showVoiceSheet: false });
+  },
+
+  /**
+   * P0-A: 防止声音选择 Sheet 遮罩层滑动穿透
+   * catchtouchmove 事件处理器，空函数即可阻止冒泡
+   */
+  onVoiceSheetPrevent() {},
+
+  /**
+   * P1-A: 同步 selectedVoice 数据到 data
+   * 从 voices 数组中找到 selectedVoiceId 对应的声音对象，
+   * 避免 WXML 中使用 findIndex 时越界（findIndex 返回 -1 时 voices[-1] 为 undefined）
    * @private
    */
-  _setupAudioContext() {
-    const ctx = this._audioCtx;
-    if (!ctx) return;
+  _syncSelectedVoice() {
+    const voice = (this.data.voices || []).find(v => v.id === this.data.selectedVoiceId)
+      || (this.data.voices || [])[0]
+      || null;
+    this.setData({ selectedVoice: voice });
+  },
 
-    // 音频开始/恢复播放
-    ctx.onPlay(() => {
-      this.setData({ playStatus: 'playing' });
+  /**
+   * 选择一个声音角色
+   * 切换后：立即停止当前播放，清除已缓存的音频路径，用新声音重新合成
+   *
+   * @param {WechatMiniprogram.CustomEvent} e - detail.voiceId: string
+   */
+  onTapSelectVoice(e) {
+    const { voiceId } = e.currentTarget.dataset;
+    if (!voiceId) return;
+
+    const { selectedVoiceId, ocrText } = this.data;
+
+    if (voiceId === selectedVoiceId) {
+      // 选了同一个声音，关闭面板即可
+      this.setData({ showVoiceSheet: false });
+      return;
+    }
+
+    // 停止当前播放，清除旧音频路径（强制用新声音重新合成）
+    ttsService.cancel();
+    this._destroyAudio();
+
+    this.setData({
+      selectedVoiceId: voiceId,
+      audioPath: '',        // 清除旧音频，触发重新合成
+      playStatus: 'idle',
+      ttsProgress: 0,
+      currentTime: 0,
+      duration: 0,
+      currentTimeLabel: '0:00',
+      durationLabel: '0:00',
+      showVoiceSheet: false,
     });
 
-    // 音频暂停
-    ctx.onPause(() => {
-      // 不强制设置 playStatus，由 onTapPlay 驱动状态机
-    });
+    // P1-A: 切换声音后同步 selectedVoice
+    this._syncSelectedVoice();
 
-    // 音频自然播放完毕 → 进入 finished 状态，显示重播按钮
-    ctx.onEnded(() => {
-      this.setData({ playStatus: 'finished', currentTime: 0 });
-    });
-
-    // 进度更新（约每 500ms 触发一次）
-    ctx.onTimeUpdate(() => {
-      const currentTime = ctx.currentTime || 0;
-      const duration    = ctx.duration    || 0;
-      this.setData({
-        currentTime,
-        duration,
-        currentTimeLabel: _formatTime(currentTime),
-        durationLabel:    _formatTime(duration),
-      });
-    });
-
-    // 播放出错
-    ctx.onError((err) => {
-      console.error('[Result] 音频播放错误', err);
-      this.setData({ playStatus: 'error', errorMsg: '播放出错，请重试' });
-    });
+    // 立即用新声音开始播放
+    if (ocrText && ocrText.trim()) {
+      this._startPlayback(ocrText);
+    }
   },
 });
 
 // ─────────────────────────────────────────────────────────────────
-//  页面级工具函数（在 Page() 外，供 _setupAudioContext 内调用）
+//  工具函数
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * 将秒数格式化为 mm:ss 字符串
- * @param {number} totalSeconds
- * @returns {string} 如 "01:23" 或 "00:00"
+ * 将秒数格式化为 "m:ss" 形式，如 65 → "1:05"
+ * @param {number} seconds - 秒数（可能含小数）
+ * @returns {string}
  */
-function _formatTime(totalSeconds) {
-  const s = Math.floor(totalSeconds || 0);
-  const mm = Math.floor(s / 60).toString().padStart(2, '0');
-  const ss = (s % 60).toString().padStart(2, '0');
-  return `${mm}:${ss}`;
+function _formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const s = Math.floor(seconds);
+  const min = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
 }

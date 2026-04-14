@@ -122,6 +122,19 @@ async function updateAudioPath(pageHash, audioPath) {
 }
 
 /**
+ * 获取所有缓存条目（从最旧到最新）
+ * 供缓存管理页和离线页展示使用
+ *
+ * @returns {Promise<PageCacheEntry[]>} 所有缓存条目数组（最旧→最新）
+ */
+async function getAllEntries() {
+  await _ensureInitialized();
+
+  const entries = _cache.entries(); // [最旧, ..., 最新]
+  return entries.map(([, val]) => val);
+}
+
+/**
  * 获取缓存统计信息
  * @returns {Promise<{ count: number, maxCount: number, totalSizeKB: number }>}
  */
@@ -203,6 +216,10 @@ function _ensureInitialized() {
   _initPromise = _initialize().then(() => {
     _initialized = true;
     _initPromise = null;
+  }).catch((err) => {
+    console.error('[Cache] 初始化失败，降级为空缓存:', err);
+    _initPromise = null;
+    _initialized = false;
   });
 
   return _initPromise;
@@ -362,6 +379,7 @@ module.exports = {
   getPage,
   setPage,
   updateAudioPath,
+  getAllEntries,
   getStats,
   removePage,
   clearAll,

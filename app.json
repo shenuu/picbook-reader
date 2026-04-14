@@ -2,7 +2,9 @@
   "pages": [
     "src/pages/home/index",
     "src/pages/guide/index",
-    "src/pages/result/index"
+    "src/pages/result/index",
+    "src/pages/cache/index",
+    "src/pages/offline/index"
   ],
   "window": {
     "backgroundTextStyle": "light",

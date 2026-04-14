@@ -9,11 +9,15 @@
   │ idle         │ 橙色「朗读」按钮           │ 隐藏              │
   │ loading      │ 灰色「合成中 xx%」禁用    │ TTS 进度条        │
   │ playing      │ 橙色脉冲「暂停」按钮      │ 播放进度条        │
+  │ paused       │ 橙色「继续」按钮          │ 播放进度条        │
   │ finished     │ 蓝色「重新朗读」按钮      │ 播放进度条（满）  │
   │ error        │ 红色「重试」按钮          │ 错误提示          │
   └──────────────┴──────────────────────────┴───────────────────┘
 
+  Phase 2 新增：声音切换面板（底部 sheet 弹窗）
+
   @author Jamie Park
+  @version 0.2.0
 -->
 
 <view class="page">
@@ -57,10 +61,10 @@
       <text class="tts-progress-label">语音合成中 {{ttsProgress}}%</text>
     </view>
 
-    <!-- 播放进度条（playing / finished 状态） -->
+    <!-- 播放进度条（playing / paused / finished 状态） -->
     <view
       class="audio-progress-wrap"
-      wx:if="{{playStatus === 'playing' || playStatus === 'finished'}}"
+      wx:if="{{playStatus === 'playing' || playStatus === 'paused' || playStatus === 'finished'}}"
     >
       <view class="audio-progress-track">
         <view
@@ -79,6 +83,20 @@
       class="error-tip"
       wx:if="{{playStatus === 'error' && errorMsg}}"
     >⚠️ {{errorMsg}}</text>
+
+    <!-- ── Phase 2: 声音切换按钮行 ──────────────── -->
+    <view class="voice-row">
+      <!-- 当前声音展示 + 切换入口 -->
+      <view class="voice-current" bindtap="onTapVoiceToggle">
+        <text class="voice-current__emoji">
+          {{selectedVoice.emoji || '🔊'}}
+        </text>
+        <text class="voice-current__label">
+          {{selectedVoice.label || '声音'}}
+        </text>
+        <text class="voice-current__arrow">▲</text>
+      </view>
+    </view>
 
     <!-- 播放/暂停/合成 主按钮 -->
     <button
@@ -99,10 +117,16 @@
         <text>合成中…</text>
       </block>
 
-      <!-- playing: 暂停 -->
+      <!-- playing: 暂停（P1-3 修复：合成完成后立即可暂停） -->
       <block wx:elif="{{playStatus === 'playing'}}">
         <text class="btn-play__icon">⏸</text>
         <text>暂停</text>
+      </block>
+
+      <!-- paused: 继续 -->
+      <block wx:elif="{{playStatus === 'paused'}}">
+        <text class="btn-play__icon">▶</text>
+        <text>继续</text>
       </block>
 
       <!-- finished: 重播 -->
@@ -128,6 +152,58 @@
       <text>↩ 从头朗读</text>
     </button>
 
+  </view>
+
+</view>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- Phase 2: 声音切换底部 Sheet 弹窗                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- 遮罩层（点击关闭面板） -->
+<view
+  wx:if="{{showVoiceSheet}}"
+  class="voice-sheet-mask"
+  bindtap="onTapVoiceSheetMask"
+  catchtouchmove="onVoiceSheetPrevent"
+></view>
+
+<!-- 底部面板 -->
+<view class="voice-sheet {{showVoiceSheet ? 'voice-sheet--visible' : ''}}">
+
+  <!-- 面板标题 + 关闭 -->
+  <view class="voice-sheet__header">
+    <text class="voice-sheet__title">选择朗读声音</text>
+    <text class="voice-sheet__close" bindtap="onTapVoiceSheetMask">✕</text>
+  </view>
+
+  <!-- 声音角色列表 -->
+  <view class="voice-sheet__list">
+    <view
+      wx:for="{{voices}}"
+      wx:key="id"
+      class="voice-item {{selectedVoiceId === item.id ? 'voice-item--active' : ''}}"
+      data-voice-id="{{item.id}}"
+      bindtap="onTapSelectVoice"
+    >
+      <!-- 头像区域（使用 emoji 代替图片） -->
+      <view class="voice-item__avatar">
+        <text class="voice-item__emoji">{{item.emoji}}</text>
+      </view>
+
+      <!-- 声音信息 -->
+      <view class="voice-item__info">
+        <text class="voice-item__name">{{item.label}}</text>
+        <text class="voice-item__desc">
+          {{item.gender === 'female' ? '女声' : item.gender === 'male' ? '男声' : '女童声'}}
+        </text>
+      </view>
+
+      <!-- 已选中标记 -->
+      <view class="voice-item__check" wx:if="{{selectedVoiceId === item.id}}">
+        <text>✓</text>
+      </view>
+    </view>
   </view>
 
 </view>

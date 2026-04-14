@@ -1,0 +1,132 @@
+<!--
+  @file pages/cache/index.wxml
+  @description 缓存管理页模板
+
+  布局：
+  ┌─────────────────────────────────────────┐
+  │  📦 缓存管理                              │
+  │  ─────────────────────────────────────  │
+  │  [LRU 容量进度条] X/20 条               │
+  │  命中率: 67%  |  占用: 12 KB            │
+  │  ─────────────────────────────────────  │
+  │  缓存条目列表（最新→最旧）               │
+  │  ┌────────────────────────────────────┐ │
+  │  │ 🎵 文字预览前30字…  昨天 14:30   ✕ │ │
+  │  └────────────────────────────────────┘ │
+  │  ...                                    │
+  │  ─────────────────────────────────────  │
+  │  [清空全部缓存]                          │
+  └─────────────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- ── 标题 ──────────────────────────────── -->
+  <view class="header">
+    <text class="header__title">📦 缓存管理</text>
+    <text class="header__sub">绘本朗读助手 · LRU 本地缓存</text>
+  </view>
+
+  <!-- ── 加载态 ─────────────────────────────── -->
+  <view wx:if="{{loading}}" class="loading-wrap">
+    <text class="loading-text">加载中…</text>
+  </view>
+
+  <block wx:else>
+
+    <!-- ── LRU 容量进度条 ─────────────────────── -->
+    <view class="capacity-card card">
+      <view class="capacity-row">
+        <text class="capacity-label">缓存容量</text>
+        <text class="capacity-count">{{cacheCount}} / {{cacheMaxCount}} 条</text>
+      </view>
+      <!-- 进度条 -->
+      <view class="capacity-track">
+        <view
+          class="capacity-fill {{capacityPercent >= 90 ? 'capacity-fill--warn' : ''}}"
+          style="width: {{capacityPercent}}%"
+        ></view>
+      </view>
+      <!-- 统计指标 -->
+      <view class="stat-row">
+        <view class="stat-item">
+          <text class="stat-value">{{hitRateLabel}}</text>
+          <text class="stat-label">命中率</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-value">{{cacheSizeKB}} KB</text>
+          <text class="stat-label">文字占用</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-value">{{hitCount}}</text>
+          <text class="stat-label">命中次数</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ── 缓存条目列表 ────────────────────────── -->
+    <view class="section-title">
+      <text>缓存记录</text>
+      <text class="section-sub">点击条目可直接重播</text>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:if="{{entries.length === 0}}" class="empty-wrap">
+      <text class="empty-icon">🗂</text>
+      <text class="empty-msg">暂无缓存记录</text>
+      <text class="empty-hint">拍照识别绘本后，内容会自动缓存在此</text>
+    </view>
+
+    <!-- 条目列表 -->
+    <view class="entry-list" wx:else>
+      <view
+        wx:for="{{entries}}"
+        wx:key="pageHash"
+        class="entry-item"
+        data-hash="{{item.pageHash}}"
+        data-text="{{item.text}}"
+        bindtap="onTapEntry"
+      >
+        <!-- 左侧音频状态图标 -->
+        <view class="entry-icon">
+          <text wx:if="{{item.hasAudio}}">🎵</text>
+          <text wx:else>📄</text>
+        </view>
+
+        <!-- 中间内容 -->
+        <view class="entry-body">
+          <text class="entry-preview">{{item.preview}}{{item.text.length > 30 ? '…' : ''}}</text>
+          <text class="entry-time">{{item.timeLabel}}</text>
+        </view>
+
+        <!-- 右侧删除按钮 -->
+        <view
+          class="entry-delete"
+          data-hash="{{item.pageHash}}"
+          catchtap="onTapDelete"
+        >
+          <text class="entry-delete__icon">✕</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ── 清空全部按钮 ────────────────────────── -->
+    <view class="footer safe-bottom">
+      <button
+        class="btn-clear {{entries.length === 0 ? 'btn-clear--disabled' : ''}}"
+        bindtap="onTapClearAll"
+        disabled="{{clearing || entries.length === 0}}"
+        hover-class="btn-clear--hover"
+      >
+        <text wx:if="{{clearing}}">⏳ 清空中…</text>
+        <text wx:else>🗑 清空全部缓存</text>
+      </button>
+    </view>
+
+  </block>
+
+</view>

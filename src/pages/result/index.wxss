@@ -278,6 +278,180 @@
   background-color: var(--color-primary-light) !important;
 }
 
+/* ── paused 状态按钮样式（蓝绿色，区别于 playing） */
+.btn-play--paused {
+  background-color: #00897B !important;
+  color: #fff !important;
+  box-shadow: 0 8rpx 24rpx rgba(0, 137, 123, 0.40) !important;
+}
+
+/* ── Phase 2: 声音切换按钮行 ─────────────────────── */
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--space-1);
+}
+
+/* 当前声音展示条（可点击，打开声音面板） */
+.voice-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background-color: var(--color-bg-muted);
+  border-radius: var(--radius-full);
+  padding: 8rpx 24rpx;
+  cursor: pointer;
+}
+
+.voice-current__emoji {
+  font-size: 36rpx;
+}
+
+.voice-current__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.voice-current__arrow {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  transform: rotate(180deg);
+  display: inline-block;
+}
+
+/* ── Phase 2: 声音选择 Sheet（底部弹窗） ─────────── */
+
+/* 遮罩层 */
+.voice-sheet-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+}
+
+/* Sheet 本体（默认隐藏在屏幕底部） */
+.voice-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 101;
+  background-color: var(--color-bg-card);
+  border-top-left-radius: var(--radius-2xl);
+  border-top-right-radius: var(--radius-2xl);
+  padding: var(--space-6) var(--space-5);
+  padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 -8rpx 48rpx rgba(0, 0, 0, 0.12);
+}
+
+/* 显示时滑入 */
+.voice-sheet--visible {
+  transform: translateY(0);
+}
+
+/* Sheet 标题行 */
+.voice-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.voice-sheet__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.voice-sheet__close {
+  font-size: var(--text-xl);
+  color: var(--color-text-secondary);
+  padding: var(--space-2);
+}
+
+/* 声音列表 */
+.voice-sheet__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 单个声音条目 */
+.voice-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-bg-base);
+  border: 2rpx solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* 选中状态 */
+.voice-item--active {
+  background-color: #FFF3E0;
+  border-color: var(--color-primary);
+}
+
+/* 头像容器 */
+.voice-item__avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background-color: var(--color-bg-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.voice-item__emoji {
+  font-size: 56rpx;
+}
+
+/* 声音信息 */
+.voice-item__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.voice-item__name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.voice-item__desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* 选中勾 */
+.voice-item__check {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: var(--text-base);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 /* 安全区 */
 .safe-bottom {
   padding-bottom: calc(var(--space-6) + constant(safe-area-inset-bottom));

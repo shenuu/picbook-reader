@@ -1,0 +1,273 @@
+/**
+ * @file pages/offline/index.wxss
+ * @description 离线降级页样式（儿童友好，温暖配色）
+ * @author Jamie Park
+ */
+
+/* ── 页面 ─────────────────────────────────────────── */
+
+.page {
+  min-height: 100vh;
+  background-color: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+  box-sizing: border-box;
+}
+
+/* ── 顶部 Hero 区 ─────────────────────────────────── */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-5) var(--space-8);
+}
+
+/* 图标容器（相对定位，放装饰元素） */
+.hero__icon-wrap {
+  position: relative;
+  width: 200rpx;
+  height: 200rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-6);
+}
+
+/* 主图标（小狐狸） */
+.hero__icon {
+  font-size: 160rpx;
+  line-height: 1;
+  /* 轻微摇摆动画，吸引儿童注意力 */
+  animation: wobble 3s ease-in-out infinite;
+}
+
+/* 装饰云朵 */
+.hero__deco {
+  position: absolute;
+  font-size: 40rpx;
+  opacity: 0.6;
+  animation: float 4s ease-in-out infinite;
+}
+
+.hero__deco--l {
+  top: 10rpx;
+  left: -20rpx;
+  animation-delay: -1s;
+}
+
+.hero__deco--r {
+  top: 20rpx;
+  right: -20rpx;
+  animation-delay: -2s;
+}
+
+.hero__title {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+  letter-spacing: 2rpx;
+}
+
+.hero__sub {
+  display: block;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  line-height: 1.8;
+  max-width: 560rpx;
+}
+
+/* ── 分节标题 ─────────────────────────────────────── */
+
+.section-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+/* ── 缓存条目列表 ─────────────────────────────────── */
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.entry-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background-color: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.entry-card:active {
+  background-color: #FFF3E0;
+  transform: scale(0.99);
+}
+
+/* 左图标 */
+.entry-icon {
+  font-size: 44rpx;
+  flex-shrink: 0;
+}
+
+/* 内容区 */
+.entry-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow: hidden;
+}
+
+.entry-preview {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entry-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+}
+
+/* 右侧播放箭头 */
+.entry-arrow {
+  font-size: var(--text-xs);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* ── 无缓存状态 ───────────────────────────────────── */
+
+.no-cache-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-6);
+  gap: var(--space-3);
+}
+
+.no-cache-icon {
+  font-size: 100rpx;
+  opacity: 0.4;
+}
+
+.no-cache-msg {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.no-cache-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* ── 底部检测按钮 ─────────────────────────────────── */
+
+.footer {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.btn-check {
+  width: 100%;
+  height: 104rpx;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-full) !important;
+  border: none !important;
+  transition: transform 0.1s ease;
+}
+
+.btn-check::after {
+  border: none;
+}
+
+/* 默认：离线状态 → 橙色 */
+.btn-check--offline {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-primary) !important;
+}
+
+/* 检测中 → 灰色禁用 */
+.btn-check--checking {
+  background-color: var(--color-text-disabled) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+/* 已联网 → 绿色 */
+.btn-check--online {
+  background-color: #2E7D32 !important;
+  color: #fff !important;
+  box-shadow: 0 8rpx 24rpx rgba(46, 125, 50, 0.35) !important;
+}
+
+.btn-check--hover {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.btn-check__icon {
+  font-size: 48rpx;
+}
+
+/* 安全区 */
+.safe-bottom {
+  padding-bottom: calc(var(--space-6) + constant(safe-area-inset-bottom));
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+/* ── 动画 ─────────────────────────────────────────── */
+
+/* 小狐狸摇摆动画 */
+@keyframes wobble {
+  0%   { transform: rotate(0deg);   }
+  20%  { transform: rotate(-6deg);  }
+  40%  { transform: rotate(6deg);   }
+  60%  { transform: rotate(-3deg);  }
+  80%  { transform: rotate(3deg);   }
+  100% { transform: rotate(0deg);   }
+}
+
+/* 云朵漂浮动画 */
+@keyframes float {
+  0%   { transform: translateY(0);     }
+  50%  { transform: translateY(-8rpx); }
+  100% { transform: translateY(0);     }
+}
+
+/* 旋转动画（合成中图标） */
+@keyframes spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}

@@ -1,0 +1,291 @@
+/**
+ * @file pages/cache/index.wxss
+ * @description 缓存管理页样式
+ * @author Jamie Park
+ */
+
+/* ── 页面 ─────────────────────────────────────────── */
+
+.page {
+  min-height: 100vh;
+  background-color: var(--color-bg-base);
+  padding: var(--space-5);
+  box-sizing: border-box;
+}
+
+/* ── 标题区 ───────────────────────────────────────── */
+
+.header {
+  padding: var(--space-4) 0 var(--space-6);
+}
+
+.header__title {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.header__sub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ── 加载态 ───────────────────────────────────────── */
+
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-16) 0;
+}
+
+.loading-text {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+}
+
+/* ── 容量进度卡片 ─────────────────────────────────── */
+
+.capacity-card {
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.capacity-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.capacity-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.capacity-count {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* 进度条 */
+.capacity-track {
+  width: 100%;
+  height: 16rpx;
+  background-color: var(--color-bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-5);
+}
+
+.capacity-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease-out;
+  min-width: 4rpx;
+}
+
+/* 容量接近上限时变红 */
+.capacity-fill--warn {
+  background: linear-gradient(90deg, #FF6F00, var(--color-error));
+}
+
+/* 三列统计指标 */
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.stat-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-number);
+}
+
+.stat-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.stat-divider {
+  width: 2rpx;
+  height: 40rpx;
+  background-color: var(--color-bg-muted);
+}
+
+/* ── 分节标题 ─────────────────────────────────────── */
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-3);
+}
+
+.section-title text:first-child {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.section-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+}
+
+/* ── 空状态 ───────────────────────────────────────── */
+
+.empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-12) var(--space-8);
+  gap: var(--space-3);
+}
+
+.empty-icon {
+  font-size: 96rpx;
+  opacity: 0.4;
+}
+
+.empty-msg {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.empty-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* ── 条目列表 ─────────────────────────────────────── */
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.entry-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background-color: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: background-color 0.15s ease;
+}
+
+.entry-item:active {
+  background-color: var(--color-bg-muted);
+}
+
+/* 左侧图标 */
+.entry-icon {
+  font-size: 44rpx;
+  flex-shrink: 0;
+}
+
+/* 中间内容 */
+.entry-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow: hidden;
+}
+
+.entry-preview {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  /* 单行省略 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entry-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+}
+
+/* 右侧删除按钮 */
+.entry-delete {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-muted);
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.entry-delete:active {
+  background-color: #FFCDD2;
+}
+
+.entry-delete__icon {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ── 底部清空按钮 ─────────────────────────────────── */
+
+.footer {
+  padding-top: var(--space-4);
+}
+
+.btn-clear {
+  width: 100%;
+  height: 96rpx;
+  font-size: var(--text-base);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full) !important;
+  background-color: #FFEBEE !important;
+  color: var(--color-error) !important;
+  border: 2rpx solid #FFCDD2 !important;
+  box-shadow: none !important;
+}
+
+.btn-clear::after {
+  border: none;
+}
+
+.btn-clear--disabled {
+  opacity: 0.4;
+}
+
+.btn-clear--hover {
+  background-color: #FFCDD2 !important;
+}
+
+/* 安全区 */
+.safe-bottom {
+  padding-bottom: calc(var(--space-6) + constant(safe-area-inset-bottom));
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
