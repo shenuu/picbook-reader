@@ -8,22 +8,32 @@
  * 安全说明：
  *  - TTS_CONFIG 中不再存放 API_KEY / API_SECRET，密钥由云函数通过环境变量管理
  *  - 小程序端只保留 APP_ID（非敏感信息），签名流程完全在 BFF/云函数侧完成
+ *  - BFF_BASE_URL 和 TTS_APP_ID 从 env.js 读取，该文件已加入 .gitignore
+ *  - 初始化：cp src/env.example.js src/env.js 并填写真实值
  *
  * @author Jamie Park
- * @version 0.2.0
+ * @version 0.3.0
  */
 
 // ─────────────────────────────────────────────────────────────────
+//  环境配置注入
+//  BFF_BASE_URL / TTS_APP_ID 从 env.js 读取，env.js 已加入 .gitignore
+//  新成员初始化：cp src/env.example.js src/env.js
+// ─────────────────────────────────────────────────────────────────
+
+const ENV = require('./env');
+
+// ─────────────────────────────────────────────────────────────────
 //  环境端点配置
-//  根据编译环境自动切换；生产环境修改 PROD.BFF_BASE_URL 即可。
+//  根据编译环境自动切换；修改端点只需编辑 src/env.js，无需改动本文件。
 // ─────────────────────────────────────────────────────────────────
 
 const ENDPOINTS = {
   prod: {
-    BFF_BASE_URL: 'https://service-xxxx.gz.apigw.tencentcs.com',
+    BFF_BASE_URL: ENV.BFF_BASE_URL_PROD,
   },
   dev: {
-    BFF_BASE_URL: 'https://service-xxxx.gz.apigw.tencentcs.com',
+    BFF_BASE_URL: ENV.BFF_BASE_URL_DEV,
   },
 };
 
@@ -45,9 +55,10 @@ const BFF_BASE_URL = currentEndpoints.BFF_BASE_URL;
 
 /**
  * 讯飞 TTS 应用 ID（非敏感，仅用于标识应用，可放前端）
- * API_KEY / API_SECRET 已迁移至 BFF 云函数环境变量，不再出现在此文件
+ * 从 env.js 读取，统一由环境配置文件管理
+ * API_KEY / API_SECRET 已迁移至 BFF 云函数环境变量，不在此文件
  */
-const TTS_APP_ID = 'f0f8eb32';
+const TTS_APP_ID = ENV.TTS_APP_ID;
 
 /**
  * BFF 签名端点：小程序调用此接口获取带 HMAC-SHA256 签名的 wss URL
@@ -67,6 +78,18 @@ const OCR_MAX_RETRY = 2;
 
 /** OCR 重试基础延迟（毫秒），指数退避：500ms → 1000ms */
 const OCR_RETRY_BASE_DELAY_MS = 500;
+
+/**
+ * OCR 上传图片文件大小上限（字节）
+ * 与云函数端 4MB base64 上限对齐（base64 膨胀约 33%，原始文件 ≤ 3MB 即可）
+ */
+const OCR_MAX_FILE_BYTES = 3 * 1024 * 1024;
+
+/**
+ * OCR 上传图片文件大小下限（字节）
+ * 小于此值视为无效图片（空文件 / 截断），直接拒绝
+ */
+const OCR_MIN_FILE_BYTES = 100;
 
 // ─────────────────────────────────────────────────────────────────
 //  TTS 运行时配置
@@ -188,6 +211,8 @@ module.exports = {
   OCR_TIMEOUT_MS,
   OCR_MAX_RETRY,
   OCR_RETRY_BASE_DELAY_MS,
+  OCR_MAX_FILE_BYTES,
+  OCR_MIN_FILE_BYTES,
   TTS_WS_CONNECT_TIMEOUT_MS,
   TTS_GLOBAL_TIMEOUT_MS,
   TTS_MAX_RETRY,

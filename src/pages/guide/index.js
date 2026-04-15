@@ -40,11 +40,15 @@ const { IMAGE_TARGET_SIZE_BYTES } = require('../../config');
 const MAX_MEDIA_COUNT = 1;
 
 /**
- * djb2 哈希采样长度（base64 字符数）
- * 对压缩后图片 base64 字符串的前 512 个字符做哈希，
- * 避免读取全文件；512 字符约覆盖 384 字节原始数据，区分度足够
+ * P3-1: 哈希采样升级
+ * 采样首/中/尾三段各 512 字符（共 1536 字符），覆盖文件头部 JPEG 标记、
+ * 中部图像数据和末尾 EOI 标记，大幅降低不同绘本页的哈希碰撞概率。
+ * 原来只取前 512 字符，两张结构相似的绘本页（如同一本书相邻两页）
+ * 可能因头部元数据相同而产生哈希碰撞。
  */
 const DJB2_SAMPLE_LEN = 512;
+/** P3-1: 多段采样片段数（首/中/尾） */
+const DJB2_SAMPLE_SEGMENTS = 3;
 
 Page({
 
@@ -222,15 +226,19 @@ Page({
   },
 
   /**
-   * P1-1: 计算图片内容哈希（djb2 算法）
+   * P3-1: 计算图片内容哈希（djb2 多段采样升级版）
    *
-   * 改进说明：
-   *  原实现（calcXorHash）仅均匀采样 128 字节做 XOR，碰撞率高；
-   *  新实现：读取压缩后图片的 base64 字符串前 512 字节（约 384B 实际数据），
-   *  用 djb2 算法哈希，输出 32 位 16 进制字符串。
-   *  避免读取整个文件（中等绘本图片压缩后约 100-300KB）以节省内存。
+   * 升级说明（相对 P1-1）：
+   *  原实现仅取 base64 字符串头部 512 字符做 djb2 哈希。
+   *  对于同一本绘本的相邻两页，JPEG 文件头（SOI、APP0/APP1 标记、EXIF 信息）
+   *  通常完全相同，导致前 512 字符碰撞。
    *
-   * djb2 算法：hash = hash * 33 ^ charCode（位运算保持 32 位整数）
+   *  P3-1 改为：首/中/尾各取 DJB2_SAMPLE_LEN 字符，拼接后做 djb2，
+   *  覆盖范围从 ~384B → ~1152B 真实图片数据，碰撞概率大幅下降。
+   *
+   *  首段（0..512）    → 覆盖 JPEG 头、EXIF、缩略图（文件特征）
+   *  中段（mid..mid+512）→ 覆盖图像扫描数据（内容特征，每页差异最大）
+   *  尾段（end-512..end）→ 覆盖 JPEG EOI 标记 + 末尾扫描块
    *
    * @param {string} filePath - 图片路径（压缩后）
    * @returns {Promise<string>} djb2 哈希的 16 进制字符串（8 位）
@@ -242,9 +250,21 @@ Page({
         filePath,
         encoding: 'base64',
         success: (res) => {
-          // 只取前 DJB2_SAMPLE_LEN 个 base64 字符，避免读取全文件
-          const sample = (res.data || '').slice(0, DJB2_SAMPLE_LEN);
-          const hash = _djb2Hash(sample);
+          const b64 = res.data || '';
+          const len = b64.length;
+
+          // P3-1: 多段采样（首/中/尾），每段 DJB2_SAMPLE_LEN 字符
+          const midStart = Math.max(0, Math.floor((len - DJB2_SAMPLE_LEN) / 2));
+          const tailStart = Math.max(0, len - DJB2_SAMPLE_LEN);
+
+          const headSample = b64.slice(0, DJB2_SAMPLE_LEN);
+          const midSample  = b64.slice(midStart, midStart + DJB2_SAMPLE_LEN);
+          const tailSample = b64.slice(tailStart);
+
+          // 三段拼接后统一哈希（比分段哈希后 XOR 更均匀）
+          const combined = headSample + midSample + tailSample;
+          const hash = _djb2Hash(combined);
+
           // 转为 8 位 16 进制字符串（前补零）
           const hexStr = (hash >>> 0).toString(16).padStart(8, '0');
           resolve(hexStr);

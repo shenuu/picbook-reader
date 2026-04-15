@@ -7,7 +7,7 @@
   │  📦 缓存管理                              │
   │  ─────────────────────────────────────  │
   │  [LRU 容量进度条] X/20 条               │
-  │  命中率: 67%  |  占用: 12 KB            │
+  │  命中率: 67%  |  文字: 12 KB  |  音频: 256 KB  |  3 文件   │
   │  ─────────────────────────────────────  │
   │  缓存条目列表（最新→最旧）               │
   │  ┌────────────────────────────────────┐ │
@@ -62,8 +62,13 @@
         </view>
         <view class="stat-divider"></view>
         <view class="stat-item">
-          <text class="stat-value">{{hitCount}}</text>
-          <text class="stat-label">命中次数</text>
+          <text class="stat-value">{{audioSizeKB}} KB</text>
+          <text class="stat-label">音频占用</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-value">{{audioFileCount}}</text>
+          <text class="stat-label">音频文件</text>
         </view>
       </view>
     </view>

@@ -68,4 +68,68 @@ async function run() {
   }
 }
 
-run();
+// ─────────────────────────────────────────────────────────────────
+//  输入校验单元测试（离线，不需要真实凭证）
+// ─────────────────────────────────────────────────────────────────
+
+async function runValidationTests() {
+  console.log('\n=== 输入校验单元测试（离线）===');
+  let passed = 0;
+  let failed = 0;
+
+  async function assert(desc, event, expectCode, expectStatus) {
+    const result = await main(event);
+    const body = JSON.parse(result.body);
+    if (result.statusCode === expectStatus && body.code === expectCode) {
+      console.log(`  ✅ ${desc}`);
+      passed++;
+    } else {
+      console.log(`  ❌ ${desc}`);
+      console.log(`     期望 HTTP ${expectStatus} code=${expectCode}`);
+      console.log(`     实际 HTTP ${result.statusCode} code=${body.code}: ${body.message}`);
+      failed++;
+    }
+  }
+
+  // 缺少 imageBase64
+  await assert(
+    '缺少 imageBase64 → 400 code=40201',
+    { body: JSON.stringify({}) },
+    40201, 400,
+  );
+
+  // 空文件（< 100B）
+  await assert(
+    '图片过小（< 100B）→ 400 code=40203',
+    { body: JSON.stringify({ imageBase64: 'aGVsbG8=' }) }, // "hello"
+    40203, 400,
+  );
+
+  // 超大文件（模拟 > 4MB base64）
+  const bigBase64 = 'A'.repeat(Math.ceil(4 * 1024 * 1024 / 0.75) + 10);
+  await assert(
+    '图片过大（> 4MB）→ 400 code=40202',
+    { body: JSON.stringify({ imageBase64: bigBase64 }) },
+    40202, 400,
+  );
+
+  // 非图片（纯文本内容）
+  const textBase64 = Buffer.from('这不是图片，只是文字内容'.repeat(20)).toString('base64');
+  await assert(
+    '非图片格式（文本 base64）→ 400 code=40204',
+    { body: JSON.stringify({ imageBase64: textBase64 }) },
+    40204, 400,
+  );
+
+  // 合法 PNG（magic bytes 正确）
+  await assert(
+    '合法 PNG → 跳过格式校验（进入签名流程）',
+    { body: JSON.stringify({ imageBase64: TINY_PNG_BASE64 }) },
+    // 无凭证时返回 500，说明格式校验通过，进入了业务逻辑
+    -1, 500,
+  );
+
+  console.log(`\n校验测试结果：${passed} 通过 / ${failed} 失败`);
+}
+
+run().then(() => runValidationTests());

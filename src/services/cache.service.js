@@ -136,7 +136,16 @@ async function getAllEntries() {
 
 /**
  * 获取缓存统计信息
- * @returns {Promise<{ count: number, maxCount: number, totalSizeKB: number }>}
+ * 包含音频文件真实磁盘大小（通过 FS stat 读取，P3-4）
+ *
+ * @returns {Promise<{
+ *   count: number,
+ *   maxCount: number,
+ *   totalSizeKB: number,
+ *   audioSizeKB: number,
+ *   textSizeKB: number,
+ *   audioFileCount: number
+ * }>}
  */
 async function getStats() {
   await _ensureInitialized();
@@ -144,14 +153,37 @@ async function getStats() {
   const entries = _cache.values();
   const count = _cache.size();
 
-  // 粗略估算文本缓存占用（音频文件大小需从 FS 读取，这里仅统计文本）
-  let totalSizeKB = 0;
+  let textSizeBytes  = 0;
+  let audioSizeBytes = 0;
+  let audioFileCount = 0;
+  const fsm = wx.getFileSystemManager();
+
   for (const entry of entries) {
-    // 文本按 2 字节/字符估算（中文 UTF-8 占 3 字节，这里保守估算）
-    totalSizeKB += Math.ceil((entry.text?.length || 0) * 2 / 1024);
+    // 文本占用：按 UTF-8 中文 3 字节/字符估算
+    textSizeBytes += Math.ceil((entry.text?.length || 0) * 3);
+
+    // 音频文件真实大小：通过 statSync 读取
+    if (entry.audioPath) {
+      try {
+        const stat = fsm.statSync(entry.audioPath);
+        audioSizeBytes += stat.size || 0;
+        audioFileCount++;
+      } catch (_) {
+        // 文件不存在（可能已被系统清理），跳过
+      }
+    }
   }
 
-  return { count, maxCount: CACHE_MAX_SIZE, totalSizeKB };
+  const totalSizeBytes = textSizeBytes + audioSizeBytes;
+
+  return {
+    count,
+    maxCount:      CACHE_MAX_SIZE,
+    totalSizeKB:   Math.ceil(totalSizeBytes  / 1024),
+    audioSizeKB:   Math.ceil(audioSizeBytes  / 1024),
+    textSizeKB:    Math.ceil(textSizeBytes   / 1024),
+    audioFileCount,
+  };
 }
 
 /**

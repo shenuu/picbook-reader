@@ -29,6 +29,10 @@ Page({
     cacheMaxCount: 20,
     /** 文字缓存占用（KB，粗略估算） */
     cacheSizeKB: 0,
+    /** 音频文件真实大小（KB，读取 wx.getFileSystemManager stat） */
+    audioSizeKB: 0,
+    /** 已缓存音频文件数 */
+    audioFileCount: 0,
     /** LRU 占用百分比（0-100），用于进度条 */
     capacityPercent: 0,
 
@@ -79,7 +83,7 @@ Page({
     try {
       // 获取统计信息
       const stats = await cacheService.getStats();
-      const { count, maxCount, totalSizeKB } = stats;
+      const { count, maxCount, totalSizeKB, audioSizeKB, audioFileCount } = stats;
 
       // 获取所有条目（从 cacheService 读取，最新在前）
       const rawEntries = await cacheService.getAllEntries();
@@ -119,6 +123,8 @@ Page({
         cacheCount: count,
         cacheMaxCount: maxCount,
         cacheSizeKB: totalSizeKB,
+        audioSizeKB,
+        audioFileCount,
         capacityPercent,
         hitCount,
         totalCount,

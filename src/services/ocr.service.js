@@ -32,6 +32,8 @@ const {
   OCR_TIMEOUT_MS,
   OCR_MAX_RETRY,
   OCR_RETRY_BASE_DELAY_MS,
+  OCR_MAX_FILE_BYTES,
+  OCR_MIN_FILE_BYTES,
 } = require('../config');
 
 /**
@@ -51,6 +53,9 @@ const {
 async function recognize(filePath, options = {}) {
   const { onProgress } = options;
   if (typeof onProgress === 'function') onProgress(5);
+
+  // Step 0: 文件大小前置校验（避免超限 / 空文件浪费网络）
+  await _validateFileSize(filePath);
 
   // Step 1: Base64 编码
   let imageBase64;
@@ -86,6 +91,47 @@ async function recognize(filePath, options = {}) {
   }
 
   throw new Error(`OCR 识别失败（已重试 ${OCR_MAX_RETRY} 次）: ${lastError?.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  内部：文件大小校验
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 校验文件大小是否在允许范围内
+ * 在 Base64 编码前执行，拦截空文件和超大文件
+ *
+ * @param {string} filePath - 本地文件路径
+ * @returns {Promise<void>} - 校验通过则 resolve，否则 reject（带 noRetry 标志）
+ * @throws {Error} 文件过小（< OCR_MIN_FILE_BYTES）或过大（> OCR_MAX_FILE_BYTES）
+ * @private
+ */
+function _validateFileSize(filePath) {
+  return new Promise((resolve, reject) => {
+    wx.getFileInfo({
+      filePath,
+      success: (info) => {
+        const size = info.size;
+        if (size < OCR_MIN_FILE_BYTES) {
+          const err = new Error(`图片文件过小（${size} 字节），请重新选择`);
+          err.noRetry = true;
+          return reject(err);
+        }
+        if (size > OCR_MAX_FILE_BYTES) {
+          const maxMB = (OCR_MAX_FILE_BYTES / 1024 / 1024).toFixed(0);
+          const err = new Error(`图片文件超过 ${maxMB}MB 限制，请压缩后重试`);
+          err.noRetry = true;
+          return reject(err);
+        }
+        resolve();
+      },
+      fail: (e) => {
+        // 无法获取文件信息时继续（不阻断流程，由后续 readFile 兜底报错）
+        console.warn('[OCR] 无法获取文件大小，跳过前置校验:', e.errMsg);
+        resolve();
+      },
+    });
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────

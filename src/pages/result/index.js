@@ -258,6 +258,14 @@ Page({
 
   /**
    * 使用 InnerAudioContext 播放 MP3 文件
+   *
+   * P3-1: 预加载优化
+   *  原实现在 onCanplay 回调里才调用 play()，中低端机型在 canplay
+   *  触发前有 200-500ms 空窗期，用户感知到明显延迟。
+   *  改为：设置 src 后立即调用 audio.play()（微信 InnerAudioContext
+   *  内部会先缓冲再播放，autoplay=true 等价但可能被系统静音策略拦截），
+   *  同时保留 onCanplay 作为兜底（首帧就绪后确保已开始播放）。
+   *
    * @param {string} filePath - 本地 MP3 文件路径
    * @private
    */
@@ -269,8 +277,14 @@ Page({
     audio.src = filePath;
     audio.autoplay = false;
 
-    // 监听 canplay，首次加载成功后开始播放
+    // P3-1: 立即发起播放请求，无需等 canplay（本地文件加载极快）
+    audio.play();
+
+    // 保留 onCanplay 作为兜底：若 play() 调用过早（缓冲未就绪），
+    // canplay 触发后再次 play() 确保真正开始播放
     audio.onCanplay(() => {
+      // 仅在尚未开始播放时兜底（防止重复触发）
+      if (!audio.paused) return;
       audio.play();
     });
 

@@ -80,6 +80,42 @@ function _sign(secretId, secretKey, payload) {
 }
 
 /**
+ * 通过 magic bytes 校验 base64 图片格式
+ * 支持：JPEG、PNG、GIF、WEBP、BMP
+ *
+ * 原理：将 base64 字符串前几个字符解码为字节，与已知格式的魔术字节匹配。
+ * 仅检查前 16 字节（base64 约 22 字符），性能开销极低。
+ *
+ * @param {string} imageBase64 - 纯 base64 字符串（不含 data: 前缀）
+ * @returns {string|null} - 非图片时返回错误描述，图片时返回 null
+ * @private
+ */
+function _validateImageFormat(imageBase64) {
+  try {
+    // 仅解码前 24 个字节（base64 32 字符）即可覆盖所有常见格式的 magic bytes
+    const headerBuf = Buffer.from(imageBase64.slice(0, 32), 'base64');
+    const h = headerBuf;
+
+    // JPEG: FF D8 FF
+    if (h[0] === 0xFF && h[1] === 0xD8 && h[2] === 0xFF) return null;
+    // PNG:  89 50 4E 47 0D 0A 1A 0A
+    if (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4E && h[3] === 0x47) return null;
+    // GIF:  47 49 46 38 (GIF8)
+    if (h[0] === 0x47 && h[1] === 0x49 && h[2] === 0x46 && h[3] === 0x38) return null;
+    // WEBP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50 (RIFF....WEBP)
+    if (h[0] === 0x52 && h[1] === 0x49 && h[2] === 0x46 && h[3] === 0x46 &&
+        h[8] === 0x57 && h[9] === 0x45 && h[10] === 0x42 && h[11] === 0x50) return null;
+    // BMP:  42 4D (BM)
+    if (h[0] === 0x42 && h[1] === 0x4D) return null;
+
+    return '不支持的文件格式，请上传 JPG、PNG、WEBP 或 GIF 图片';
+  } catch (e) {
+    // base64 解码失败 → 不是合法 base64 字符串
+    return '图片数据格式无效，请重新选择';
+  }
+}
+
+/**
  * 调用腾讯云 GeneralBasicOCR
  */
 function _callTencentOCR(secretId, secretKey, imageBase64) {
@@ -155,6 +191,17 @@ exports.main = async (event) => {
   const approxBytes = imageBase64.length * 0.75;
   if (approxBytes > 4 * 1024 * 1024) {
     return _makeResponse(400, { code: 40202, message: '图片超过 4MB 限制，请压缩后重试' });
+  }
+
+  // 最小大小校验（< 100B 视为空文件 / 截断）
+  if (approxBytes < 100) {
+    return _makeResponse(400, { code: 40203, message: '图片文件过小，请重新选择' });
+  }
+
+  // 图片格式校验（通过 magic bytes 检测）
+  const formatErr = _validateImageFormat(imageBase64);
+  if (formatErr) {
+    return _makeResponse(400, { code: 40204, message: formatErr });
   }
 
   try {

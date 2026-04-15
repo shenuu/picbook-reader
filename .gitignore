@@ -12,6 +12,9 @@ yarn.lock
 .env.local
 .env.*.local
 
+# 本地环境配置（含真实 BFF 地址 / TTS AppID，不提交）
+src/env.js
+
 # 凭证文档（包含密钥，绝不提交）
 docs/credentials.md
 

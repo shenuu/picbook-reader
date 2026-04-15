@@ -43,6 +43,9 @@ const _requestQueue = [];
 /** 队列最大长度（防止内存溢出） */
 const QUEUE_MAX_SIZE = 50;
 
+/** 队列任务最大等待时长（毫秒）。超过此时间仍未执行则自动丢弃 */
+const QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟
+
 // ─────────────────────────────────────────────────────────────────
 //  初始化（模块加载时自动执行）
 // ─────────────────────────────────────────────────────────────────
@@ -199,6 +202,29 @@ function clearQueue(reason = '队列已手动清空') {
 }
 
 /**
+ * 主动清理队列中已超时的任务（reject，不执行）
+ * 场景：页面 onShow / 定期调用，防止积压过期任务
+ *
+ * @param {number} [maxAgeMs=QUEUE_TIMEOUT_MS] 超时阈值（毫秒），默认 5 分钟
+ * @returns {number} 被清理的任务数
+ */
+function pruneExpired(maxAgeMs = QUEUE_TIMEOUT_MS) {
+  const now = Date.now();
+  let pruned = 0;
+  for (let i = _requestQueue.length - 1; i >= 0; i--) {
+    if (now - _requestQueue[i].addedAt > maxAgeMs) {
+      const [task] = _requestQueue.splice(i, 1);
+      task.reject(new Error('离线任务等待超时，已自动丢弃'));
+      pruned++;
+    }
+  }
+  if (pruned > 0) {
+    console.warn(`[Network] 已清理 ${pruned} 个超时离线任务（超过 ${maxAgeMs / 1000}s）`);
+  }
+  return pruned;
+}
+
+/**
  * 获取当前队列长度
  * @returns {number}
  */
@@ -216,6 +242,11 @@ function getQueueLength() {
  * @private
  */
 async function _flushQueue() {
+  if (_requestQueue.length === 0) return;
+
+  // 先清理超时任务，再执行剩余任务
+  pruneExpired();
+
   if (_requestQueue.length === 0) return;
   console.info(`[Network] 网络已恢复，开始执行离线队列，共 ${_requestQueue.length} 个任务`);
 
@@ -245,5 +276,6 @@ module.exports = {
   offNetworkStatusChange,
   enqueue,
   clearQueue,
+  pruneExpired,
   getQueueLength,
 };
