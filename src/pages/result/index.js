@@ -160,9 +160,19 @@ Page({
   _receiveOcrData() {
     try {
       const eventChannel = this.getOpenerEventChannel();
-      eventChannel.on('ocrData', (data) => {
+      eventChannel.on('ocrData', async (data) => {
         const { text = '', fromCache, hash } = data;
-        const updates = { ocrText: text };
+
+        // Task 7: 若来自书架（text 是摘要），从缓存读完整文字
+        let fullText = text;
+        if (fromCache && hash) {
+          try {
+            const entry = await cacheService.getPage(hash);
+            if (entry && entry.text) fullText = entry.text;
+          } catch (_) {}
+        }
+
+        const updates = { ocrText: fullText };
 
         if (fromCache) {
           updates.cacheStatus = 'cached';
@@ -172,7 +182,7 @@ Page({
         }
 
         this.setData(updates);
-        console.info('[Result] 收到 OCR 数据，文字长度:', text.length);
+        console.info('[Result] 收到 OCR 数据，文字长度:', fullText.length);
       });
     } catch (err) {
       // 直接打开 result 页时无 EventChannel，非致命错误
