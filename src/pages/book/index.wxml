@@ -1,0 +1,73 @@
+<!--
+  @file pages/book/index.wxml
+  @description 绘本详情页模板
+
+  布局：
+  ┌─────────────────────────────────┐
+  │  绘本标题 + 改名按钮             │
+  ├─────────────────────────────────┤
+  │  「继续阅读」按钮（有页时显示）  │
+  ├─────────────────────────────────┤
+  │  页面列表（书签高亮）           │
+  └─────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="hint">加载中…</view>
+
+  <block wx:elif="{{book}}">
+
+    <!-- 绑本信息头部 -->
+    <view class="book-header">
+      <view class="book-header__info">
+        <text class="book-header__title">{{book.title}}</text>
+        <text class="book-header__meta">
+          共 {{book.pages.length}} 页{{book.lastPageIndex >= 0 ? ' · 上次读到第 ' + (book.lastPageIndex + 1) + ' 页' : ' · 尚未开始'}}
+        </text>
+      </view>
+      <button class="btn-rename" bindtap="onTapRename">改名</button>
+    </view>
+
+    <!-- 继续阅读按钮 -->
+    <view wx:if="{{book.pages.length > 0}}" class="continue-bar">
+      <button class="btn-continue" bindtap="onTapContinue">
+        ▶ {{book.lastPageIndex >= 0 ? '继续阅读（第 ' + (book.lastPageIndex + 1) + ' 页）' : '从第 1 页开始'}}
+      </button>
+    </view>
+
+    <!-- 空书 -->
+    <view wx:if="{{book.pages.length === 0}}" class="empty">
+      <text class="empty__icon">📄</text>
+      <text class="empty__text">还没有页面{"\n"}拍照识别后在结果页点「加入书架」即可</text>
+    </view>
+
+    <!-- 页面列表 -->
+    <scroll-view scroll-y class="list">
+      <view
+        wx:for="{{pages}}"
+        wx:key="pageHash"
+        class="page-item {{item.isCurrent ? 'page-item--current' : ''}}"
+        data-page-index="{{item.index}}"
+        data-page-hash="{{item.pageHash}}"
+        bindtap="onTapPage"
+      >
+        <view class="page-item__num">{{item.index + 1}}</view>
+        <view class="page-item__content">
+          <text class="page-item__text">{{item.text}}</text>
+          <view class="page-item__tags">
+            <text wx:if="{{item.hasAudio}}" class="tag tag--audio">🔊 已合成</text>
+            <text wx:if="{{item.isCurrent}}" class="tag tag--bookmark">🔖 书签</text>
+          </view>
+        </view>
+        <view class="page-item__arrow">›</view>
+      </view>
+      <view class="safe-bottom"></view>
+    </scroll-view>
+
+  </block>
+
+</view>

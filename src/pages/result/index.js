@@ -32,6 +32,7 @@
 
 const ttsService   = require('../../services/tts.service');
 const cacheService = require('../../services/cache.service');
+const bookService  = require('../../services/book.service');
 const { TTS_VOICES, DEFAULT_TTS_VOICE_ID } = require('../../config');
 
 // ─────────────────────────────────────────────────────────────────
@@ -86,6 +87,23 @@ Page({
     voices: TTS_VOICES,
     /** 当前选中的声音对象（P1-A: 避免 WXML 中 findIndex 越界） */
     selectedVoice: null,
+    /**
+     * 语种类型：'chinese' | 'english' | 'mixed'
+     * TTS 合成时由 onLanguageDetected 回调写入，用于显示英文提示 badge
+     */
+    languageType: 'chinese',
+
+    // ── 书架相关 ───────────────────────────────
+    /** 来自 book 页跳转时携带的 bookId（有值则显示书签保存入口） */
+    bookId: '',
+    /** 来自 book 页跳转时携带的页下标 */
+    pageIndex: -1,
+    /** 「加入书架」弹窗是否可见 */
+    showShelfSheet: false,
+    /** 所有绘本列表（选择书架用） */
+    books: [],
+    /** 书架列表加载中 */
+    booksLoading: false,
   },
 
   // ─────────────────────────────────────────────
@@ -101,13 +119,15 @@ Page({
    * @param {string} options.fromCache - '1'|'true' 表示来自缓存
    */
   onLoad(options) {
-    const { hash = '', fromCache = '' } = options;
+    const { hash = '', fromCache = '', bookId = '', pageIndex = '-1' } = options;
     const isCached = fromCache === 'true' || fromCache === '1';
 
     this.setData({
       imageHash: hash,
       fromCache: isCached,
       cacheStatus: isCached ? 'cached' : 'none',
+      bookId: bookId || '',
+      pageIndex: parseInt(pageIndex, 10) || -1,
     });
 
     // P1-2: 通过 EventChannel 接收 guide 页 emit 的 ocrData
@@ -225,11 +245,15 @@ Page({
         /**
          * P1-3: onPlayStart 回调
          * 合成完成、即将开始播放时，TTS Service 调用此回调
-         * 上层立即将状态切换到 'playing'，用户此时可点击"暂停"
+         * 上层立即将状态切换到 'playing'，用户此时可点击\"暂停\"
          * 不再等到音频加载完才切换（原来 loading → playing 延迟过长）
          */
         onPlayStart: () => {
           this.setData({ playStatus: 'playing' });
+        },
+        // 语种检测结果回调：english/mixed 时显示提示 badge
+        onLanguageDetected: (lang) => {
+          this.setData({ languageType: lang.type });
         },
         voice: {
           vcn: voiceConfig.vcn,
@@ -249,6 +273,8 @@ Page({
 
     } catch (err) {
       console.error('[Result] TTS 合成失败:', err.message);
+      // 临时调试：弹出具体错误信息
+      wx.showModal({ title: 'TTS调试错误', content: err.message || '未知错误', showCancel: false });
       this.setData({
         playStatus: 'error',
         errorMsg: err.message || 'TTS 合成失败，请重试',
@@ -273,17 +299,19 @@ Page({
     // 销毁旧的 Audio 实例
     this._destroyAudio();
 
+    // iOS 必须强制走扬声器，否则声音从听筒出来
+    wx.setInnerAudioOption({ speakerOn: true });
+
     const audio = wx.createInnerAudioContext();
-    audio.src = filePath;
     audio.autoplay = false;
+    audio.obeyMuteSwitch = false;
 
-    // P3-1: 立即发起播放请求，无需等 canplay（本地文件加载极快）
-    audio.play();
+    audio.onPlay(() => {
+      console.info('[Result] onPlay');
+    });
 
-    // 保留 onCanplay 作为兜底：若 play() 调用过早（缓冲未就绪），
-    // canplay 触发后再次 play() 确保真正开始播放
+    // 兜底：若 play() 调用过早，canplay 后再次触发
     audio.onCanplay(() => {
-      // 仅在尚未开始播放时兜底（防止重复触发）
       if (!audio.paused) return;
       audio.play();
     });
@@ -307,7 +335,8 @@ Page({
 
     // 播放出错
     audio.onError((err) => {
-      console.error('[Result] 音频播放出错:', err);
+      console.error('[Result] 音频播放出错:', JSON.stringify(err));
+      wx.showModal({ title: '播放出错', content: `code:${err.errCode} msg:${err.errMsg}`, showCancel: false });
       this.setData({
         playStatus: 'error',
         errorMsg: '音频播放出错：' + (err.errMsg || JSON.stringify(err)),
@@ -315,6 +344,11 @@ Page({
     });
 
     this._audioCtx = audio;
+    // 所有事件注册完毕后再设置 src 并播放
+    // 测试：先用网络MP3验证播放器是否正常
+    audio.src = filePath;
+    // audio.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+    audio.play();
     // P1-3: 如果 onPlayStart 已将状态切换为 playing，这里保持不变
     // 否则在此设置（兜底）
     if (this.data.playStatus !== 'playing') {
@@ -450,6 +484,81 @@ Page({
     if (ocrText && ocrText.trim()) {
       this._startPlayback(ocrText);
     }
+  },
+
+  // ─────────────────────────────────────────────
+  //  书架：加入书架
+  // ─────────────────────────────────────────────
+
+  /**
+   * 点击「加入书架」按钮
+   * 加载书架列表后弹出选择 Sheet
+   */
+  async onTapAddToShelf() {
+    this.setData({ showShelfSheet: true, booksLoading: true, books: [] });
+    try {
+      const books = await bookService.getAllBooks();
+      this.setData({ books, booksLoading: false });
+    } catch (err) {
+      console.error('[Result] 加载书架失败:', err.message);
+      this.setData({ booksLoading: false });
+    }
+  },
+
+  /** 关闭「加入书架」Sheet */
+  onTapShelfSheetMask() {
+    this.setData({ showShelfSheet: false });
+  },
+
+  /** 阻止 Sheet 内部滑动穿透 */
+  onShelfSheetPrevent() {},
+
+  /**
+   * 选择某本绘本，将当前页加入
+   * @param {WechatMiniprogram.CustomEvent} e - dataset.bookId
+   */
+  async onTapSelectBook(e) {
+    const { bookId } = e.currentTarget.dataset;
+    const { imageHash } = this.data;
+    if (!bookId || !imageHash) return;
+
+    this.setData({ showShelfSheet: false });
+    wx.showLoading({ title: '添加中…', mask: true });
+    try {
+      await bookService.addPage(bookId, imageHash);
+      wx.hideLoading();
+      wx.showToast({ title: '已加入书架 📚', icon: 'success' });
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '添加失败', icon: 'none' });
+      console.error('[Result] 加入书架失败:', err.message);
+    }
+  },
+
+  /**
+   * 在「加入书架」Sheet 里点「新建绘本」
+   */
+  onTapCreateBook() {
+    this.setData({ showShelfSheet: false });
+    wx.showModal({
+      title: '新建绘本',
+      placeholderText: '请输入绘本名称',
+      editable: true,
+      success: async (res) => {
+        if (!res.confirm) return;
+        const title = (res.content || '').trim();
+        wx.showLoading({ title: '创建中…', mask: true });
+        try {
+          const book = await bookService.createBook(title || '未命名绘本');
+          await bookService.addPage(book.bookId, this.data.imageHash);
+          wx.hideLoading();
+          wx.showToast({ title: '已加入新绘本 📚', icon: 'success' });
+        } catch (err) {
+          wx.hideLoading();
+          wx.showToast({ title: '操作失败', icon: 'none' });
+        }
+      },
+    });
   },
 });
 

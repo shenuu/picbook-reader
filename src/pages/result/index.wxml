@@ -30,6 +30,11 @@
       <text wx:else>☁️ 未缓存</text>
     </view>
     <text wx:if="{{fromCache}}" class="from-cache-tag">来自缓存</text>
+    <!-- 英文/混合语种提示 badge -->
+    <view wx:if="{{languageType === 'english' || languageType === 'mixed'}}" class="lang-badge lang-badge--{{languageType}}">
+      <text wx:if="{{languageType === 'english'}}">🔤 英文朗读</text>
+      <text wx:elif="{{languageType === 'mixed'}}">🔤 中英混合</text>
+    </view>
   </view>
 
   <!-- ── OCR 文字展示区 ─────────────────────────── -->
@@ -152,15 +157,78 @@
       <text>↩ 从头朗读</text>
     </button>
 
+    <!-- 加入书架按钮（有 imageHash 时显示） -->
+    <button
+      wx:if="{{imageHash}}"
+      class="btn-shelf-add"
+      bindtap="onTapAddToShelf"
+      hover-class="btn-shelf-add--hover"
+    >
+      <text>📚 加入书架</text>
+    </button>
+
   </view>
 
+</view>
+</view>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 加入书架 Sheet 弹窗                                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<view
+  wx:if="{{showShelfSheet}}"
+  class="voice-sheet-mask"
+  bindtap="onTapShelfSheetMask"
+  catchtouchmove="onShelfSheetPrevent"
+></view>
+
+<view class="voice-sheet {{showShelfSheet ? 'voice-sheet--visible' : ''}}">
+  <view class="voice-sheet__header">
+    <text class="voice-sheet__title">加入书架</text>
+    <text class="voice-sheet__close" bindtap="onTapShelfSheetMask">✕</text>
+  </view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{booksLoading}}" class="shelf-sheet__loading">
+    <text>加载中…</text>
+  </view>
+
+  <block wx:else>
+    <!-- 新建绘本按钮 -->
+    <view class="shelf-new-btn" bindtap="onTapCreateBook">
+      <text class="shelf-new-btn__icon">＋</text>
+      <text class="shelf-new-btn__label">新建绘本</text>
+    </view>
+
+    <!-- 书架列表 -->
+    <view class="voice-sheet__list" wx:if="{{books.length > 0}}">
+      <view
+        wx:for="{{books}}"
+        wx:key="bookId"
+        class="voice-item"
+        data-book-id="{{item.bookId}}"
+        bindtap="onTapSelectBook"
+      >
+        <view class="voice-item__avatar">
+          <text class="voice-item__emoji">📖</text>
+        </view>
+        <view class="voice-item__info">
+          <text class="voice-item__name">{{item.title}}</text>
+          <text class="voice-item__desc">{{item.pages.length}} 页</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空书架提示 -->
+    <view wx:elif="{{books.length === 0}}" class="shelf-sheet__empty">
+      <text>还没有绘本，点上方「新建绘本」创建吧～</text>
+    </view>
+  </block>
 </view>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- Phase 2: 声音切换底部 Sheet 弹窗                        -->
 <!-- ═══════════════════════════════════════════════════════ -->
-
-<!-- 遮罩层（点击关闭面板） -->
 <view
   wx:if="{{showVoiceSheet}}"
   class="voice-sheet-mask"

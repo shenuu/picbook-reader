@@ -1,0 +1,186 @@
+/**
+ * @file pages/book/index.wxss
+ * @description 绘本详情页样式
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #FFFDF8;
+}
+
+.hint {
+  padding: 120rpx 32rpx;
+  text-align: center;
+  color: #999;
+  font-size: 28rpx;
+}
+
+/* ── 头部 ── */
+.book-header {
+  display: flex;
+  align-items: center;
+  padding: 28rpx 32rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #f0e8e0;
+  gap: 16rpx;
+}
+
+.book-header__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.book-header__title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #222;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-header__meta {
+  font-size: 24rpx;
+  color: #888;
+  display: block;
+  margin-top: 6rpx;
+}
+
+.btn-rename {
+  font-size: 24rpx;
+  color: #FF7043;
+  background: transparent;
+  border: 1rpx solid #FF7043;
+  border-radius: 32rpx;
+  padding: 10rpx 28rpx;
+  flex-shrink: 0;
+}
+
+/* ── 继续阅读 ── */
+.continue-bar {
+  padding: 20rpx 32rpx;
+  background: #FFF3E0;
+}
+
+.btn-continue {
+  background: #FF7043;
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  padding: 20rpx;
+  width: 100%;
+  border: none;
+  font-weight: 600;
+}
+
+/* ── 空状态 ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 48rpx;
+  gap: 24rpx;
+}
+
+.empty__icon {
+  font-size: 80rpx;
+}
+
+.empty__text {
+  font-size: 28rpx;
+  color: #999;
+  text-align: center;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+/* ── 页面列表 ── */
+.list {
+  flex: 1;
+}
+
+.page-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  margin: 12rpx 24rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  gap: 20rpx;
+  border: 2rpx solid transparent;
+}
+
+.page-item--current {
+  border-color: #FF7043;
+  background: #FFF8F6;
+}
+
+.page-item__num {
+  width: 56rpx;
+  height: 56rpx;
+  background: #FF7043;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.page-item--current .page-item__num {
+  background: #E64A19;
+}
+
+.page-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-item__text {
+  font-size: 26rpx;
+  color: #444;
+  line-height: 1.5;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-item__tags {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 24rpx;
+}
+
+.tag--audio {
+  background: #E8F5E9;
+  color: #388E3C;
+}
+
+.tag--bookmark {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.page-item__arrow {
+  font-size: 44rpx;
+  color: #ccc;
+  flex-shrink: 0;
+}
+
+.safe-bottom {
+  height: 48rpx;
+}

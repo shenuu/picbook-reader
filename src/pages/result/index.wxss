@@ -52,6 +52,25 @@
   color: var(--color-text-disabled);
 }
 
+/* 语种提示 badge */
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+  font-size: var(--text-xs);
+}
+
+.lang-badge--english {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.lang-badge--mixed {
+  background: #FFF7ED;
+  color: #C2410C;
+}
+
 /* ── 文字展示区 ───────────────────────────────────────── */
 
 .text-scroll {

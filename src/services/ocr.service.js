@@ -28,7 +28,7 @@
  */
 
 const {
-  BFF_BASE_URL,
+  OCR_URL,
   OCR_TIMEOUT_MS,
   OCR_MAX_RETRY,
   OCR_RETRY_BASE_DELAY_MS,
@@ -179,7 +179,7 @@ function _callOcrBFF(imageBase64) {
     }, OCR_TIMEOUT_MS);
 
     wx.request({
-      url: `${BFF_BASE_URL}/api/ocr`,
+      url: OCR_URL,
       method: 'POST',
       header: {
         'Content-Type': 'application/json',
@@ -209,7 +209,7 @@ function _callOcrBFF(imageBase64) {
           return;
         }
 
-        const { text, words = [] } = body.data;
+        const { fullText: text, words = [] } = body.data;
 
         if (!text || !text.trim()) {
           // 识别内容为空通常代表图片中没有文字，不触发重试

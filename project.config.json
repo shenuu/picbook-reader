@@ -36,14 +36,30 @@
     "disableUseStrict": false,
     "minifyWXML": true,
     "showES6CompileOption": false,
-    "useFixedJSONFormat": false
+    "useFixedJSONFormat": false,
+    "compileWorklet": false,
+    "localPlugins": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "disableSWC": true
   },
-  "libVersion": "3.4.8",
+  "libVersion": "3.15.2",
   "cloudfunctionRoot": "cloud-functions/",
   "cloudfunctionTemplateRoot": "template/",
   "editorSetting": {
     "tabIndent": "insertSpaces",
     "tabSize": 2
   },
-  "condition": {}
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  }
 }

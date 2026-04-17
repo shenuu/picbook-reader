@@ -54,6 +54,9 @@ App({
   onLaunch(options) {
     console.info('[App] 小程序启动', options);
 
+    // 全局设置音频从扬声器外放（不走听筒）
+    wx.setInnerAudioOption({ speakerOn: true });
+
     // 初始化网络监听（network.js 被 require 时已自动触发，此处同步全局数据）
     this._syncNetworkStatus();
     this._registerNetworkListener();

@@ -150,22 +150,17 @@ Page({
   },
 
   /**
-   * 点击"缓存管理"按钮 → 弹 Modal 展示统计，支持一键清除
+   * 点击"缓存管理"按钮 → 跳转缓存管理页
    */
   onTapCacheManager() {
-    const { count, maxCount, totalSizeKB } = this.data.cacheStats;
-    wx.showModal({
-      title: '缓存状态',
-      content: `已缓存 ${count}/${maxCount} 页\n占用空间约 ${totalSizeKB} KB`,
-      showCancel: count > 0, // 有缓存时才显示"清除缓存"按钮
-      cancelText: '清除缓存',
-      confirmText: '关闭',
-      success: (res) => {
-        if (res.cancel) {
-          this._handleClearCache();
-        }
-      },
-    });
+    wx.navigateTo({ url: '/src/pages/cache/index' });
+  },
+
+  /**
+   * 点击"我的书架"按钮 → 跳转书架页
+   */
+  onTapShelf() {
+    wx.navigateTo({ url: '/src/pages/shelf/index' });
   },
 
   /**

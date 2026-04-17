@@ -191,16 +191,13 @@ Page({
   _chooseMedia() {
     this.setData({ status: 'choosing' });
     return new Promise((resolve, reject) => {
-      wx.chooseMedia({
+      wx.chooseImage({
         count: MAX_MEDIA_COUNT,
-        mediaType: ['image'],
+        sizeType: ['original', 'compressed'],
         sourceType: ['album', 'camera'],
-        camera: 'back',
         success: (res) => {
-          // P0-5: success 回调中只做同步操作（resolve），
-          // 不再 async/await，避免异常被吞掉
-          const file = res.tempFiles && res.tempFiles[0];
-          resolve(file ? file.tempFilePath : null);
+          const tempPath = res.tempFilePaths && res.tempFilePaths[0];
+          resolve(tempPath || null);
         },
         fail: (err) => {
           // 用户主动取消时 errMsg 包含 'cancel'，不视为错误

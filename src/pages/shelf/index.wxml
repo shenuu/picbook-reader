@@ -1,0 +1,56 @@
+<!--
+  @file pages/shelf/index.wxml
+  @description 书架页模板
+
+  布局：
+  ┌─────────────────────────────────┐
+  │  「＋ 新建绘本」工具栏           │
+  ├─────────────────────────────────┤
+  │  空状态 / 加载中 / 绘本列表      │
+  └─────────────────────────────────┘
+
+  @author Jamie Park
+-->
+
+<view class="page">
+
+  <!-- 工具栏 -->
+  <view class="toolbar">
+    <button class="btn-create" bindtap="onTapCreate">＋ 新建绘本</button>
+  </view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="hint">
+    <text>加载中…</text>
+  </view>
+
+  <!-- 空书架 -->
+  <view wx:elif="{{books.length === 0}}" class="empty">
+    <text class="empty__icon">📚</text>
+    <text class="empty__text">书架空空如也～{"\n"}先去拍照，在结果页点「加入书架」吧</text>
+  </view>
+
+  <!-- 绘本列表 -->
+  <scroll-view wx:else scroll-y class="list">
+    <view
+      wx:for="{{books}}"
+      wx:key="bookId"
+      class="book-item"
+      data-book-id="{{item.bookId}}"
+      data-title="{{item.title}}"
+      bindtap="onTapBook"
+      bindlongpress="onLongPressBook"
+    >
+      <view class="book-item__icon">📖</view>
+      <view class="book-item__info">
+        <text class="book-item__title">{{item.title}}</text>
+        <text class="book-item__meta">
+          {{item.pages.length}} 页{{item.lastPageIndex >= 0 ? ' · 读到第 ' + (item.lastPageIndex + 1) + ' 页' : ' · 未开始'}}
+        </text>
+      </view>
+      <view class="book-item__arrow">›</view>
+    </view>
+    <view class="list-hint">长按绘本可删除</view>
+  </scroll-view>
+
+</view>

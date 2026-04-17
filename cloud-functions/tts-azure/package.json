@@ -1,0 +1,6 @@
+{
+  "name": "tts-azure",
+  "version": "1.0.0",
+  "description": "Azure Neural TTS 云函数（英文朗读专用）",
+  "main": "index.js"
+}

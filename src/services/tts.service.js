@@ -45,6 +45,9 @@ const {
   VOICE_CONFIG,
 } = require('../config');
 
+const { processForTts } = require('./text-processor.service');
+const ttsTencentService = require('./tts-tencent.service');
+
 /** 本地音频文件存储目录（wx.env.USER_DATA_PATH 下） */
 const AUDIO_DIR = `${wx.env.USER_DATA_PATH}/${AUDIO_STORAGE_DIR}`;
 
@@ -56,15 +59,18 @@ const DEFAULT_BUSINESS_PARAMS = {
   aue: 'lame',         // P0-3: 音频编码改为 MP3（原来是 'raw'）
   sfl: 1,              // 流式返回
   auf: 'audio/mpeg',   // P0-3: 音频格式改为 audio/mpeg（原来是 audio/L16;rate=16000）
-  vcn: VOICE_CONFIG[DEFAULT_VOICE_TYPE]?.vcn || 'x_xiaoyan', // 默认发音人
-  speed: VOICE_CONFIG[DEFAULT_VOICE_TYPE]?.speed || 50,       // 语速 0-100
+  vcn: VOICE_CONFIG[DEFAULT_VOICE_TYPE]?.vcn || 'xiaoyan', // 默认发音人
+  speed: VOICE_CONFIG[DEFAULT_VOICE_TYPE]?.speed || 50,    // 语速 0-100
   volume: 50,          // 音量
   pitch: 50,           // 音调
   tte: 'utf8',         // 文本编码
+  reg: '2',            // 英文单词按整词朗读（'1'=逐字母，'2'=按单词）
+  rdn: '0',            // 数字按优先策略读
 };
 
 /** 当前 WebSocket 任务引用（用于 cancel()） */
 let _currentSocketTask = null;
+let _firstFrameReceived = false;
 
 // ─────────────────────────────────────────────────────────────────
 //  公开接口
@@ -90,18 +96,50 @@ let _currentSocketTask = null;
 async function synthesize(text, options = {}) {
   const { onProgress, onPlayStart, voice = {} } = options;
 
+  // ── 文本预处理：OCR 噪声清洗 + 语种检测 + 英文增强 + 字节截断 ──
+  const { processedText, language, truncated } = processForTts(text);
+  if (truncated) {
+    console.warn('[TTS] 文本超长已截断');
+  }
+  console.info(`[TTS] 语种检测: ${language.type}，英文占比 ${(language.englishRatio * 100).toFixed(0)}%`);
+
+  // 把语种信息透传给调用方（result 页面可用来显示提示 badge）
+  if (typeof options.onLanguageDetected === 'function') {
+    options.onLanguageDetected(language);
+  }
+
+  // ── 语种路由 ──────────────────────────────────────────────────
+  // english / mixed → 腾讯云大模型 TTS（VoiceType 1001，支持中英双语）
+  // chinese         → 讯飞 WebSocket TTS（免费发音人 xiaoyan 等）
+  if (language.type === 'english' || language.type === 'mixed') {
+    console.info(`[TTS] ${language.type} 文本 → 腾讯云大模型 TTS`);
+    return ttsTencentService.synthesize(processedText, {
+      languageType: language.type,
+      onProgress,
+      onPlayStart,
+    });
+  }
+
+  // 中文：走讯飞 WebSocket TTS
+  console.info('[TTS] 中文文本 → 讯飞 TTS');
+
   // 合并发音人参数（options.voice 可覆盖默认值）
   const businessParams = { ...DEFAULT_BUSINESS_PARAMS, ...voice };
 
   let lastError;
   for (let attempt = 0; attempt <= TTS_MAX_RETRY; attempt++) {
     if (attempt > 0) {
+      // 重试前强制关闭上一次的 WebSocket 连接
+      if (_currentSocketTask) {
+        try { _currentSocketTask.close({ code: 1000, reason: '重试关闭' }); } catch (_) {}
+        _currentSocketTask = null;
+      }
       // 指数退避：第1次重试等 500ms，第2次等 1000ms
       await _delay(TTS_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
       console.info(`[TTS] 第 ${attempt} 次重试…`);
     }
     try {
-      const localPath = await _doSynthesize(text, businessParams, onProgress);
+      const localPath = await _doSynthesize(processedText, businessParams, onProgress);
       // P1-3: 合成完成，通知上层现在可以切换到 PLAYING 状态
       if (typeof onPlayStart === 'function') {
         onPlayStart();
@@ -227,8 +265,8 @@ function _getSignedWsUrl() {
  */
 function _streamTts(wsUrl, text, businessParams, onProgress) {
   return new Promise((resolve, reject) => {
-    /** 收集所有 Base64 音频帧（字符串拼接后再 decode） */
-    const audioChunks = [];
+    /** 收集所有帧解码后的字节数组 */
+    const audioByteArrays = [];
     let totalFrames = 0;
 
     /**
@@ -276,9 +314,12 @@ function _streamTts(wsUrl, text, businessParams, onProgress) {
       }
     }, TTS_GLOBAL_TIMEOUT_MS);
 
+    console.info('[TTS] 正在连接 wsUrl:', wsUrl.slice(0, 80));
+    _firstFrameReceived = false;
     const socketTask = wx.connectSocket({
       url: wsUrl,
       fail: (err) => {
+        wx.showModal({ title: 'WS连接fail', content: err.errMsg, showCancel: false });
         safeReject(new Error('WebSocket 连接失败: ' + err.errMsg));
       },
     });
@@ -290,17 +331,33 @@ function _streamTts(wsUrl, text, businessParams, onProgress) {
       clearTimeout(connectTimer);
       console.info('[TTS] WebSocket 已连接');
 
-      // 连接成功后立即发送合成请求（讯飞协议格式）
-      const payload = _buildTtsPayload(text, businessParams);
-      socketTask.send({
-        data: JSON.stringify(payload),
-        fail: (err) => safeReject(new Error('发送 TTS 请求失败: ' + err.errMsg)),
-      });
+      try {
+        const payload = _buildTtsPayload(text, businessParams);
+        const payloadStr = JSON.stringify(payload);
+        console.info('[TTS] payload vcn:', payload.business?.vcn, 'app_id:', payload.common?.app_id);
+        socketTask.send({
+          data: payloadStr,
+          success: () => {
+            console.info('[TTS] payload 发送成功');
+          },
+          fail: (err) => {
+            wx.showModal({ title: 'send失败', content: err.errMsg, showCancel: false });
+            safeReject(new Error('发送 TTS 请求失败: ' + err.errMsg));
+          },
+        });
+      } catch (e) {
+        wx.showModal({ title: 'onOpen异常', content: e.message || String(e), showCancel: false });
+        safeReject(new Error('onOpen 异常: ' + (e.message || String(e))));
+      }
     });
 
     socketTask.onMessage((event) => {
       try {
+        console.info('[TTS] 收到消息:', typeof event.data === 'string' ? event.data.slice(0, 200) : event.data);
         const frame = JSON.parse(event.data);
+        if (frame.code !== 0) {
+          wx.showModal({ title: '讯飞错误', content: `code=${frame.code}: ${frame.message}`, showCancel: false });
+        }
 
         // 讯飞错误码非 0 时视为失败
         if (frame.code !== 0) {
@@ -312,7 +369,7 @@ function _streamTts(wsUrl, text, businessParams, onProgress) {
         const { audio, status } = frame.data || {};
 
         if (audio) {
-          audioChunks.push(audio); // 收集 Base64 字符串片段
+          audioByteArrays.push(_base64Decode(audio)); // 解码为字节数组
           totalFrames++;
 
           // 根据已收帧数估算进度（10~90 区间，留头尾给 token 获取和文件写入）
@@ -328,8 +385,16 @@ function _streamTts(wsUrl, text, businessParams, onProgress) {
         if (status === 2) {
           try { socketTask.close({}); } catch (_) {}
           _currentSocketTask = null;
-          const fullBase64 = audioChunks.join('');
-          console.info(`[TTS] 合成完成，共 ${totalFrames} 帧，Base64 长度: ${fullBase64.length}`);
+          // 合并所有字节数组，重新编码为 Base64
+          const totalLen = audioByteArrays.reduce((s, a) => s + a.length, 0);
+          const merged = new Uint8Array(totalLen);
+          let offset = 0;
+          for (const arr of audioByteArrays) {
+            merged.set(arr, offset);
+            offset += arr.length;
+          }
+          const fullBase64 = _uint8ArrayToBase64(merged);
+          console.info(`[TTS] 合成完成，共 ${totalFrames} 帧，字节数: ${totalLen}，Base64长度: ${fullBase64.length}`);
           safeResolve(fullBase64);
         }
       } catch (parseErr) {
@@ -344,8 +409,10 @@ function _streamTts(wsUrl, text, businessParams, onProgress) {
      * 修复后：safeReject 保证只触发一次，全局 timer 作为 onClose 不触发时的最后防线
      */
     socketTask.onError((err) => {
-      console.error('[TTS] WebSocket 错误:', err.errMsg || JSON.stringify(err));
-      safeReject(new Error('WebSocket 错误: ' + (err.errMsg || JSON.stringify(err))));
+      const msg = err.errMsg || JSON.stringify(err);
+      console.error('[TTS] WebSocket 错误:', msg);
+      wx.showModal({ title: 'WS onError', content: msg, showCancel: false });
+      safeReject(new Error('WebSocket 错误: ' + msg));
       // 主动关闭，触发 onClose 以释放资源（但 onClose 内的 safeReject 会因 settled=true 被忽略）
       try { socketTask.close({}); } catch (_) {}
     });
@@ -407,9 +474,19 @@ function _writeAudioFile(base64Data) {
     fs.writeFile({
       filePath,
       data: base64Data,
-      encoding: 'base64', // 告知 wx 将 base64 字符串解码后写入二进制文件
+      encoding: 'base64',
       success: () => {
-        console.info('[TTS] 音频文件已写入:', filePath);
+        // 验证文件实际大小
+        try {
+          const stat = fs.statSync(filePath);
+          console.info('[TTS] 音频文件已写入:', filePath, '大小:', stat.size, 'bytes');
+          if (stat.size < 100) {
+            reject(new Error(`写入的文件过小(${stat.size}字节)，可能不是有效MP3`));
+            return;
+          }
+        } catch (e) {
+          console.warn('[TTS] stat失败:', e.message);
+        }
         resolve(filePath);
       },
       fail: (err) => reject(new Error('写入音频文件失败: ' + err.errMsg)),
@@ -429,14 +506,75 @@ function _writeAudioFile(base64Data) {
  * @returns {string}   - Base64 编码结果
  * @private
  */
+/**
+ * 将 Base64 字符串解码为 Uint8Array 字节数组
+ */
+function _base64Decode(base64) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+  // 去掉 padding
+  const clean = base64.replace(/=+$/, '');
+  const len = Math.floor(clean.length * 3 / 4);
+  const bytes = new Uint8Array(len);
+  let byteIdx = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const b0 = lookup[clean.charCodeAt(i)];
+    const b1 = lookup[clean.charCodeAt(i + 1)];
+    const b2 = lookup[clean.charCodeAt(i + 2)] || 0;
+    const b3 = lookup[clean.charCodeAt(i + 3)] || 0;
+    bytes[byteIdx++] = (b0 << 2) | (b1 >> 4);
+    if (i + 2 < clean.length) bytes[byteIdx++] = ((b1 & 0xF) << 4) | (b2 >> 2);
+    if (i + 3 < clean.length) bytes[byteIdx++] = ((b2 & 0x3) << 6) | b3;
+  }
+  return bytes.subarray(0, byteIdx);
+}
+
+/**
+ * 将 Uint8Array 编码为 Base64 字符串
+ */
+function _uint8ArrayToBase64(bytes) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = bytes[i + 1] || 0;
+    const b2 = bytes[i + 2] || 0;
+    result += chars[b0 >> 2];
+    result += chars[((b0 & 3) << 4) | (b1 >> 4)];
+    result += i + 1 < bytes.length ? chars[((b1 & 0xF) << 2) | (b2 >> 6)] : '=';
+    result += i + 2 < bytes.length ? chars[b2 & 0x3F] : '=';
+  }
+  return result;
+}
+
 function _base64Encode(str) {
-  // encodeURIComponent → %XX 形式（UTF-8 字节）
-  // replace → 将 %XX 转为 latin1 字符（btoa 只支持 latin1）
-  return btoa(
-    encodeURIComponent(str).replace(/%([0-9A-F]{2})/gi, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16))
-    )
-  );
+  // 微信小程序不支持 btoa，使用自定义实现
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  // 先将字符串转为 UTF-8 字节数组
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code < 0x80) {
+      bytes.push(code);
+    } else if (code < 0x800) {
+      bytes.push(0xC0 | (code >> 6));
+      bytes.push(0x80 | (code & 0x3F));
+    } else {
+      bytes.push(0xE0 | (code >> 12));
+      bytes.push(0x80 | ((code >> 6) & 0x3F));
+      bytes.push(0x80 | (code & 0x3F));
+    }
+  }
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i], b1 = bytes[i + 1], b2 = bytes[i + 2];
+    result += chars[b0 >> 2];
+    result += chars[((b0 & 3) << 4) | (b1 >> 4)];
+    result += i + 1 < bytes.length ? chars[((b1 & 0xF) << 2) | (b2 >> 6)] : '=';
+    result += i + 2 < bytes.length ? chars[b2 & 0x3F] : '=';
+  }
+  return result;
 }
 
 /**

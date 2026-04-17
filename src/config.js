@@ -28,26 +28,17 @@ const ENV = require('./env');
 //  根据编译环境自动切换；修改端点只需编辑 src/env.js，无需改动本文件。
 // ─────────────────────────────────────────────────────────────────
 
-const ENDPOINTS = {
-  prod: {
-    BFF_BASE_URL: ENV.BFF_BASE_URL_PROD,
-  },
-  dev: {
-    BFF_BASE_URL: ENV.BFF_BASE_URL_DEV,
-  },
-};
+/** OCR 云函数直接 URL（腾讯云函数 URL） */
+const OCR_BASE_URL = ENV.OCR_URL;
 
-/**
- * 当前生效的端点配置
- * 通过 __wxConfig.envVersion 区分正式版（release）与开发版/体验版
- */
-const currentEndpoints =
-  (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion === 'release')
-    ? ENDPOINTS.prod
-    : ENDPOINTS.dev;
+/** TTS 签名云函数直接 URL（腾讯云函数 URL） */
+const TTS_SIGN_BASE_URL = ENV.TTS_SIGN_URL;
 
-/** BFF（Backend For Frontend）服务基础地址，不含末尾斜杠 */
-const BFF_BASE_URL = currentEndpoints.BFF_BASE_URL;
+/** 腾讯云 TTS 云函数直接 URL（英文/混合专用） */
+const TTS_TENCENT_BASE_URL = ENV.TTS_TENCENT_URL;
+
+/** Azure Neural TTS 云函数直接 URL（英文专用） */
+const TTS_AZURE_BASE_URL = ENV.TTS_AZURE_URL || '';
 
 // ─────────────────────────────────────────────────────────────────
 //  TTS 配置（P0-1 安全修复：移除硬编码密钥）
@@ -64,7 +55,16 @@ const TTS_APP_ID = ENV.TTS_APP_ID;
  * BFF 签名端点：小程序调用此接口获取带 HMAC-SHA256 签名的 wss URL
  * 云函数 tts-sign 负责生成签名，密钥通过 process.env 注入
  */
-const TTS_WS_SIGN_URL = currentEndpoints.BFF_BASE_URL + '/tts-sign';
+const TTS_WS_SIGN_URL = TTS_SIGN_BASE_URL;
+
+/** 腾讯云 TTS 云函数 URL（英文/混合文本专用） */
+const TTS_TENCENT_URL = TTS_TENCENT_BASE_URL;
+
+/** Azure Neural TTS 云函数 URL（英文专用） */
+const TTS_AZURE_URL = TTS_AZURE_BASE_URL;
+
+/** OCR 请求完整 URL */
+const OCR_URL = OCR_BASE_URL;
 
 // ─────────────────────────────────────────────────────────────────
 //  OCR 配置
@@ -156,10 +156,10 @@ const DEFAULT_VOICE_TYPE = 'childFemale';
  * label: 前端展示名称
  */
 const VOICE_CONFIG = {
-  childFemale: { vcn: 'x_xiaoman', speed: 45, label: '甜甜女声' },
-  childMale:   { vcn: 'x_xiaoyu',  speed: 45, label: '活泼男声' },
-  adultFemale: { vcn: 'x_xiaoyan', speed: 50, label: '温柔女声' },
-  adultMale:   { vcn: 'x_xiaofeng', speed: 50, label: '磁性男声' },
+  childFemale: { vcn: 'xiaoyan',  speed: 45, label: '甜甜女声' },
+  childMale:   { vcn: 'xiaoyu',   speed: 45, label: '活泼男声' },
+  adultFemale: { vcn: 'xiaoyan',  speed: 50, label: '温柔女声' },
+  adultMale:   { vcn: 'xiaofeng', speed: 50, label: '磁性男声' },
 };
 
 /**
@@ -205,9 +205,11 @@ const DEFAULT_TTS_VOICE_ID = 'xiaoyan';
 // ─────────────────────────────────────────────────────────────────
 
 module.exports = {
-  BFF_BASE_URL,
+  OCR_URL,
   TTS_APP_ID,
   TTS_WS_SIGN_URL,
+  TTS_TENCENT_URL,
+  TTS_AZURE_URL,
   OCR_TIMEOUT_MS,
   OCR_MAX_RETRY,
   OCR_RETRY_BASE_DELAY_MS,

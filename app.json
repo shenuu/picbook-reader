@@ -4,7 +4,9 @@
     "src/pages/guide/index",
     "src/pages/result/index",
     "src/pages/cache/index",
-    "src/pages/offline/index"
+    "src/pages/offline/index",
+    "src/pages/shelf/index",
+    "src/pages/book/index"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -21,8 +23,5 @@
     "scope.camera": {
       "desc": "需要使用摄像头拍摄绘本页面，以识别文字内容"
     }
-  },
-  "requiredPrivateInfos": [
-    "chooseMedia"
-  ]
+  }
 }

@@ -97,6 +97,16 @@
         <text class="btn-cache__icon">🗂️</text>
         <text>缓存管理（{{cacheStats.count}} 页）</text>
       </button>
+
+      <!-- 次要按钮：我的书架（始终显示） -->
+      <button
+        class="btn-secondary btn-shelf"
+        bindtap="onTapShelf"
+        hover-class="btn-secondary--hover"
+      >
+        <text class="btn-shelf__icon">📚</text>
+        <text>我的书架</text>
+      </button>
     </view>
 
     <!-- 底部提示 -->

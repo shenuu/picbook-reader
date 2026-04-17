@@ -1,0 +1,110 @@
+/**
+ * @file pages/shelf/index.wxss
+ * @description 书架页样式
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #FFFDF8;
+}
+
+/* ── 工具栏 ── */
+.toolbar {
+  padding: 24rpx 32rpx 16rpx;
+}
+
+.btn-create {
+  background: #FF7043;
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  padding: 18rpx 48rpx;
+  border: none;
+  font-weight: 600;
+}
+
+/* ── 空/加载 ── */
+.hint {
+  padding: 120rpx 32rpx;
+  text-align: center;
+  color: #999;
+  font-size: 28rpx;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 48rpx;
+  gap: 24rpx;
+}
+
+.empty__icon {
+  font-size: 96rpx;
+}
+
+.empty__text {
+  font-size: 28rpx;
+  color: #999;
+  text-align: center;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+/* ── 列表 ── */
+.list {
+  flex: 1;
+}
+
+.book-item {
+  display: flex;
+  align-items: center;
+  padding: 28rpx 32rpx;
+  background: #fff;
+  margin: 16rpx 24rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  gap: 24rpx;
+}
+
+.book-item__icon {
+  font-size: 56rpx;
+  flex-shrink: 0;
+}
+
+.book-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.book-item__title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #222;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-item__meta {
+  font-size: 24rpx;
+  color: #888;
+  margin-top: 6rpx;
+  display: block;
+}
+
+.book-item__arrow {
+  font-size: 44rpx;
+  color: #ccc;
+  flex-shrink: 0;
+}
+
+.list-hint {
+  text-align: center;
+  font-size: 22rpx;
+  color: #ccc;
+  padding: 16rpx 0 48rpx;
+}
