@@ -71,7 +71,7 @@ const OCR_URL = OCR_BASE_URL;
 // ─────────────────────────────────────────────────────────────────
 
 /** OCR 请求超时（毫秒） */
-const OCR_TIMEOUT_MS = 5000;
+const OCR_TIMEOUT_MS = 10000;
 
 /** OCR 最大重试次数（不含第一次正常尝试） */
 const OCR_MAX_RETRY = 2;
