@@ -8,7 +8,7 @@
 /* ── 页面结构 ─────────────────────────────────────────── */
 
 .page {
-  min-height: 100vh;
+  height: 100vh;
   background-color: var(--color-bg-base);
   display: flex;
   flex-direction: column;
@@ -77,8 +77,6 @@
   flex: 1;
   padding: 0 var(--space-5) var(--space-4);
   overflow: hidden;
-  /* 限制滚动区最大高度，保证播放器始终可见 */
-  max-height: calc(100vh - 440rpx);
 }
 
 .text-card {
@@ -475,4 +473,32 @@
 .safe-bottom {
   padding-bottom: calc(var(--space-6) + constant(safe-area-inset-bottom));
   padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+/* ── 书架按钮 ── */
+.btn-shelf-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFF8E1;
+  color: #F57F17;
+  border: 2rpx solid #FFE082;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  padding: 16rpx 40rpx;
+  margin-top: 24rpx;
+}
+
+.btn-shelf-add--hover {
+  background: #FFECB3;
+}
+
+.btn-shelf-added {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9E9E9E;
+  font-size: 26rpx;
+  margin-top: 24rpx;
+  padding: 16rpx 0;
 }

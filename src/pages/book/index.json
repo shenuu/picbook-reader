@@ -2,5 +2,6 @@
   "navigationBarTitleText": "绘本详情",
   "navigationBarBackgroundColor": "#FF7043",
   "navigationBarTextStyle": "white",
-  "backgroundColor": "#FFFDF8"
+  "backgroundColor": "#FFFDF8",
+  "disableScroll": true
 }

@@ -16,6 +16,7 @@
  */
 
 const cacheService = require('../../services/cache.service');
+const bookService  = require('../../services/book.service');
 const network = require('../../utils/network');
 
 Page({
@@ -120,8 +121,17 @@ Page({
   async _loadCacheStats() {
     this.setData({ loadingStats: true });
     try {
-      const stats = await cacheService.getStats();
-      this.setData({ cacheStats: stats, loadingStats: false });
+      const [stats, allEntries, shelfHashes] = await Promise.all([
+        cacheService.getStats(),
+        cacheService.getAllEntries(),
+        bookService.getAllPageHashes(),
+      ]);
+      // 排除已在书架中的页（与缓存管理页逻辑一致，基于实际条目过滤）
+      const freeCount = allEntries.filter((e) => !shelfHashes.has(e.pageHash)).length;
+      this.setData({
+        cacheStats: { ...stats, count: freeCount },
+        loadingStats: false,
+      });
     } catch (err) {
       console.error('[Home] 获取缓存统计失败', err);
       this.setData({ loadingStats: false });

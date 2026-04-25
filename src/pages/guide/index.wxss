@@ -208,18 +208,16 @@
 
 .btn-shoot {
   width: 100%;
-  height: 104rpx;
-  font-size: var(--text-xl);
+  height: 96rpx;
+  font-size: var(--text-base);
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
   border-radius: var(--radius-full) !important;
   background-color: var(--color-primary) !important;
   color: #fff !important;
   box-shadow: var(--shadow-primary) !important;
   border: none !important;
+  padding: 0 !important;
+  line-height: 96rpx;
 }
 
 .btn-shoot::after {
@@ -231,8 +229,17 @@
   box-shadow: none !important;
 }
 
+.btn-shoot__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  line-height: 1;
+}
+
 .btn-shoot__icon {
-  font-size: 48rpx;
+  font-size: 36rpx;
+  line-height: 1;
 }
 
 .tip-text {

@@ -11,6 +11,7 @@
   │ compressing  │ Loading + 「正在压缩图片…」                      │
   │ hashing      │ Loading + 「计算图片指纹…」                      │
   │ recognizing  │ 图片预览 + 进度条 + 「识别中 xx%」               │
+  │ refining     │ 图片预览 + Loading + 「✨ 整理段落中…」           │
   │ done         │ 成功动效（短暂显示后自动跳转）                    │
   │ error        │ 错误提示 + 「重新拍照」按钮                       │
   └──────────────┴────────────────────────────────────────────────┘
@@ -49,19 +50,22 @@
         mode="aspectFit"
       />
 
-      <!-- 识别中：进度条覆盖层 -->
+      <!-- 识别中/整理中：进度条覆盖层 -->
       <view
         class="progress-overlay"
-        wx:if="{{status === 'recognizing' || status === 'compressing' || status === 'hashing'}}"
+        wx:if="{{status === 'recognizing' || status === 'compressing' || status === 'hashing' || status === 'refining'}}"
       >
         <view class="progress-panel">
           <!-- 旋转 Loading 图标 -->
-          <view class="progress-panel__spinner spin">⚙️</view>
+          <view class="progress-panel__spinner spin">
+            {{status === 'refining' ? '✨' : '⚙️'}}
+          </view>
 
           <!-- 状态文字 -->
           <text class="progress-panel__label">
             {{status === 'compressing' ? '正在压缩图片…'
              : status === 'hashing'    ? '计算图片指纹…'
+             : status === 'refining'   ? '整理段落中…'
              :                          '识别中 ' + progress + '%'}}
           </text>
 
@@ -103,20 +107,25 @@
         bindtap="onTapChooseImage"
         hover-class="btn-primary--hover"
       >
-        <text class="btn-shoot__icon">📷</text>
-        <text>{{status === 'error' ? '重新拍照' : '拍照 / 从相册选图'}}</text>
+        <view class="btn-shoot__inner">
+          <text class="btn-shoot__icon">📷</text>
+          <text>{{status === 'error' ? '重新拍照' : '拍照 / 从相册选图'}}</text>
+        </view>
       </button>
     </block>
 
     <!-- 处理中：禁用按钮 -->
     <block wx:if="{{status !== 'idle' && status !== 'error' && status !== 'done'}}">
       <button class="btn-primary btn-shoot btn-shoot--disabled" disabled>
-        <text class="spin">⚙️</text>
-        <text>
-          {{status === 'compressing' ? '正在压缩…'
-           : status === 'hashing'    ? '计算指纹…'
-           :                          '识别中 ' + progress + '%'}}
-        </text>
+        <view class="btn-shoot__inner">
+          <text class="spin">⚙️</text>
+          <text>
+            {{status === 'compressing' ? '正在压缩…'
+             : status === 'hashing'    ? '计算指纹…'
+             : status === 'refining'   ? '整理段落…'
+             :                          '识别中 ' + progress + '%'}}
+          </text>
+        </view>
       </button>
     </block>
 

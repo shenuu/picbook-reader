@@ -1,27 +1,15 @@
 <!--
   @file pages/book/index.wxml
-  @description 绘本详情页模板
-
-  布局：
-  ┌─────────────────────────────────┐
-  │  绘本标题 + 改名按钮             │
-  ├─────────────────────────────────┤
-  │  「继续阅读」按钮（有页时显示）  │
-  ├─────────────────────────────────┤
-  │  页面列表（书签高亮）           │
-  └─────────────────────────────────┘
-
-  @author Jamie Park
+  @description 绘本详情页 - 左滑删除 + 长按拖拽排序 + 单击进入 result
 -->
 
-<view class="page">
+<view class="page" catchtap="onSwipeClose">
 
-  <!-- 加载中 -->
   <view wx:if="{{loading}}" class="hint">加载中…</view>
 
   <block wx:elif="{{book}}">
 
-    <!-- 绑本信息头部 -->
+    <!-- 头部 -->
     <view class="book-header">
       <view class="book-header__info">
         <text class="book-header__title">{{book.title}}</text>
@@ -29,45 +17,141 @@
           共 {{book.pages.length}} 页{{book.lastPageIndex >= 0 ? ' · 上次读到第 ' + (book.lastPageIndex + 1) + ' 页' : ' · 尚未开始'}}
         </text>
       </view>
-      <button class="btn-rename" bindtap="onTapRename">改名</button>
     </view>
 
-    <!-- 继续阅读按钮 -->
-    <view wx:if="{{book.pages.length > 0}}" class="continue-bar">
+    <!-- 连续播放入口 -->
+    <view wx:if="{{book.pages.length > 0 && (playStatus === 'idle' || playStatus === 'finished')}}" class="continue-bar">
       <button class="btn-continue" bindtap="onTapContinue">
-        ▶ {{book.lastPageIndex >= 0 ? '继续阅读（第 ' + (book.lastPageIndex + 1) + ' 页）' : '从第 1 页开始'}}
+        ▶ {{book.lastPageIndex >= 0 ? '继续（第 ' + (book.lastPageIndex + 1) + ' 页）' : '从第 1 页开始'}}
       </button>
+      <button wx:if="{{book.lastPageIndex > 0}}" class="btn-from-start" bindtap="onTapPlayFromStart">从头</button>
     </view>
 
     <!-- 空书 -->
     <view wx:if="{{book.pages.length === 0}}" class="empty">
       <text class="empty__icon">📄</text>
-      <text class="empty__text">还没有页面{"\n"}拍照识别后在结果页点「加入书架」即可</text>
+      <text class="empty__text">还没有页面&#10;拍照识别后在结果页点「加入书架」即可</text>
     </view>
 
+    <!-- 拖拽时的提示 -->
+    <view wx:if="{{isDragging}}" class="drag-hint">松开放置到新位置</view>
+
     <!-- 页面列表 -->
-    <scroll-view scroll-y class="list">
-      <view
-        wx:for="{{pages}}"
-        wx:key="pageHash"
-        class="page-item {{item.isCurrent ? 'page-item--current' : ''}}"
-        data-page-index="{{item.index}}"
-        data-page-hash="{{item.pageHash}}"
-        bindtap="onTapPage"
-      >
-        <view class="page-item__num">{{item.index + 1}}</view>
-        <view class="page-item__content">
-          <text class="page-item__text">{{item.text}}</text>
-          <view class="page-item__tags">
-            <text wx:if="{{item.hasAudio}}" class="tag tag--audio">🔊 已合成</text>
-            <text wx:if="{{item.isCurrent}}" class="tag tag--bookmark">🔖 书签</text>
+    <scroll-view
+      scroll-y="{{!isDragging}}"
+      class="list"
+      scroll-with-animation
+      bindscroll="onListScroll"
+    >
+      <view wx:for="{{pages}}" wx:key="pageHash">
+
+        <!--
+          外层 row-wrap：overflow hidden，限制左滑范围
+          内层 page-item：通过 translateX 平移
+          右侧 delete-btn：绝对定位在 row-wrap 右侧外
+        -->
+        <view
+          class="row-wrap {{dragIndex === item.index ? 'row-wrap--dragging' : ''}}"
+        >
+          <!-- 删除按钮（藏在右侧，左滑后露出） -->
+          <view
+            class="delete-btn"
+            data-page-hash="{{item.pageHash}}"
+            data-page-index="{{item.index}}"
+            catchtap="onTapDeletePage"
+          >
+            <text class="delete-btn__icon">✕</text>
+          </view>
+
+          <!-- 条目主体 -->
+          <view
+            class="page-item
+              {{item.isCurrent ? 'page-item--current' : ''}}
+              {{playIndex === item.index ? 'page-item--playing' : ''}}"
+            style="transform: translateX({{swipeX[item.index] || 0}}px);"
+            data-page-index="{{item.index}}"
+            data-page-hash="{{item.pageHash}}"
+            data-swipe-key="{{item.index}}"
+            bindtouchstart="onItemTouchStart"
+            bindtouchmove="onItemTouchMove"
+            bindtouchend="onItemTouchEnd"
+            bindtap="onTapPage"
+          >
+            <!-- 序号 / 播放状态图标 -->
+            <view class="page-item__num">
+              <text wx:if="{{playIndex === item.index && playStatus === 'playing'}}">🔊</text>
+              <text wx:elif="{{playIndex === item.index && playStatus === 'paused'}}">⏸</text>
+              <text wx:elif="{{playIndex === item.index && playStatus === 'loading'}}">⏳</text>
+              <text wx:else>{{item.index + 1}}</text>
+            </view>
+
+            <!-- 文字 + 标签 -->
+            <view class="page-item__content">
+              <text class="page-item__text">{{item.text}}</text>
+              <view class="page-item__tags">
+                <text wx:if="{{item.hasAudio}}" class="tag tag--audio">🔊 已合成</text>
+                <text wx:if="{{item.isCurrent}}" class="tag tag--bookmark">🔖 书签</text>
+              </view>
+            </view>
+
+            <!-- 右侧操作区：空闲时显示「从此页播放」按钮，播放中显示拖拽把手 -->
+            <view
+              wx:if="{{playStatus === 'idle' || playStatus === 'finished'}}"
+              class="play-from-btn {{!item.text || item.text === '（缓存已过期）' ? 'play-from-btn--disabled' : ''}}"
+              data-page-index="{{item.index}}"
+              catchtap="onTapPlayFrom"
+            >▶</view>
+            <view wx:else class="drag-handle">⠿</view>
           </view>
         </view>
-        <view class="page-item__arrow">›</view>
+
       </view>
-      <view class="safe-bottom"></view>
+      <view class="safe-bottom" style="height: {{playStatus !== 'idle' && playStatus !== 'finished' ? '200rpx' : '48rpx'}}"></view>
     </scroll-view>
 
+    <!-- 拖拽时浮动卡片 -->
+    <view
+      wx:if="{{isDragging && dragIndex >= 0}}"
+      class="drag-float"
+      style="top: {{dragFloatTop}}px;"
+    >
+      <view class="page-item__num">{{dragIndex + 1}}</view>
+      <view class="page-item__content">
+        <text class="page-item__text">{{pages[dragIndex].text}}</text>
+      </view>
+    </view>
+
+    <!-- 拖拽时的蒙层：catchtouchmove 彻底锁住页面滚动 -->
+    <view
+      wx:if="{{isDragging}}"
+      class="drag-overlay"
+      catchtouchmove="onDragOverlayMove"
+      catchtouchend="onDragOverlayEnd"
+    ></view>
+
   </block>
+
+  <!-- 底部浮动播放控制栏 -->
+  <view class="player-bar {{playStatus !== 'idle' && playStatus !== 'finished' ? 'player-bar--visible' : ''}}">
+    <view class="player-bar__info">
+      <text class="player-bar__page">第 {{playIndex + 1}} / {{pages.length}} 页</text>
+      <text wx:if="{{playStatus === 'loading'}}" class="player-bar__synth">合成中 {{synthProgress}}%</text>
+      <text wx:else class="player-bar__text">{{playText}}</text>
+    </view>
+
+    <view class="player-bar__controls">
+      <view class="player-btn {{playIndex <= 0 ? 'player-btn--disabled' : ''}}" bindtap="onTapPrev">⏮</view>
+
+      <view class="player-btn player-btn--main" bindtap="onTapTogglePause">
+        <text wx:if="{{playStatus === 'playing'}}">⏸</text>
+        <text wx:elif="{{playStatus === 'loading'}}">⏳</text>
+        <text wx:else>▶</text>
+      </view>
+
+      <view class="player-btn {{playIndex >= pages.length - 1 ? 'player-btn--disabled' : ''}}" bindtap="onTapNext">⏭</view>
+
+      <view class="player-btn player-btn--stop" bindtap="onTapStop">■</view>
+    </view>
+  </view>
 
 </view>

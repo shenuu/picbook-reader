@@ -104,6 +104,8 @@ Page({
     books: [],
     /** 书架列表加载中 */
     booksLoading: false,
+    /** 当前页是否已加入书架（true 时隐藏「加入书架」按钮） */
+    inShelf: false,
   },
 
   // ─────────────────────────────────────────────
@@ -134,6 +136,12 @@ Page({
     this._receiveOcrData();
     // P1-A: 初始化时同步 selectedVoice
     this._syncSelectedVoice();
+    // 检查当前页是否已在书架
+    if (hash) {
+      bookService.getAllPageHashes().then((set) => {
+        this.setData({ inShelf: set.has(hash) });
+      });
+    }
   },
 
   /**
@@ -165,18 +173,21 @@ Page({
 
         // Task 7: 若来自书架（text 是摘要），从缓存读完整文字
         let fullText = text;
+        const updates = { ocrText: fullText };
+
         if (fromCache && hash) {
           try {
             const entry = await cacheService.getPage(hash);
-            if (entry && entry.text) fullText = entry.text;
+            if (entry && entry.text) {
+              fullText = entry.text;
+              updates.ocrText = fullText;
+            }
+            // 恢复已合成的音频路径，避免重复调用 TTS 云函数
+            if (entry && entry.audioPath) updates.audioPath = entry.audioPath;
           } catch (_) {}
-        }
-
-        const updates = { ocrText: fullText };
-
-        if (fromCache) {
           updates.cacheStatus = 'cached';
         }
+
         if (hash) {
           updates.imageHash = hash;
         }
@@ -309,61 +320,75 @@ Page({
     // 销毁旧的 Audio 实例
     this._destroyAudio();
 
-    // iOS 必须强制走扬声器，否则声音从听筒出来
-    wx.setInnerAudioOption({ speakerOn: true });
+    // iOS 音频路由重新配置是异步的：必须等 success 回调后再创建 context 并播放，
+    // 否则 audio session 尚未切换，声音仍从听筒出来。
+    wx.setInnerAudioOption({
+      speakerOn: true,
+      success: () => {
+        const audio = wx.createInnerAudioContext();
+        audio.autoplay = false;
+        audio.obeyMuteSwitch = false;
 
-    const audio = wx.createInnerAudioContext();
-    audio.autoplay = false;
-    audio.obeyMuteSwitch = false;
+        audio.onPlay(() => {
+          console.info('[Result] onPlay');
+        });
 
-    audio.onPlay(() => {
-      console.info('[Result] onPlay');
+        // 兜底：若 play() 调用过早，canplay 后再次触发
+        audio.onCanplay(() => {
+          if (!audio.paused) return;
+          audio.play();
+        });
+
+        // 时间更新
+        audio.onTimeUpdate(() => {
+          const cur = audio.currentTime;
+          const dur = audio.duration;
+          this.setData({
+            currentTime: cur,
+            duration: dur,
+            currentTimeLabel: _formatTime(cur),
+            durationLabel: _formatTime(dur),
+          });
+        });
+
+        // 播放结束
+        audio.onEnded(() => {
+          this.setData({ playStatus: 'finished' });
+        });
+
+        // 播放出错
+        audio.onError((err) => {
+          console.error('[Result] 音频播放出错:', JSON.stringify(err));
+          wx.showModal({ title: '播放出错', content: `code:${err.errCode} msg:${err.errMsg}`, showCancel: false });
+          this.setData({
+            playStatus: 'error',
+            errorMsg: '音频播放出错：' + (err.errMsg || JSON.stringify(err)),
+          });
+        });
+
+        this._audioCtx = audio;
+        audio.src = filePath;
+        audio.play();
+        if (this.data.playStatus !== 'playing') {
+          this.setData({ playStatus: 'playing' });
+        }
+      },
+      fail: (err) => {
+        console.error('[Result] setInnerAudioOption 失败:', err);
+        // 降级：直接播放，可能走听筒
+        const audio = wx.createInnerAudioContext();
+        audio.obeyMuteSwitch = false;
+        audio.onCanplay(() => { if (!audio.paused) return; audio.play(); });
+        audio.onEnded(() => { this.setData({ playStatus: 'finished' }); });
+        audio.onError((e) => { this.setData({ playStatus: 'error' }); });
+        this._audioCtx = audio;
+        audio.src = filePath;
+        audio.play();
+        if (this.data.playStatus !== 'playing') {
+          this.setData({ playStatus: 'playing' });
+        }
+      },
     });
-
-    // 兜底：若 play() 调用过早，canplay 后再次触发
-    audio.onCanplay(() => {
-      if (!audio.paused) return;
-      audio.play();
-    });
-
-    // 时间更新
-    audio.onTimeUpdate(() => {
-      const cur = audio.currentTime;
-      const dur = audio.duration;
-      this.setData({
-        currentTime: cur,
-        duration: dur,
-        currentTimeLabel: _formatTime(cur),
-        durationLabel: _formatTime(dur),
-      });
-    });
-
-    // 播放结束
-    audio.onEnded(() => {
-      this.setData({ playStatus: 'finished' });
-    });
-
-    // 播放出错
-    audio.onError((err) => {
-      console.error('[Result] 音频播放出错:', JSON.stringify(err));
-      wx.showModal({ title: '播放出错', content: `code:${err.errCode} msg:${err.errMsg}`, showCancel: false });
-      this.setData({
-        playStatus: 'error',
-        errorMsg: '音频播放出错：' + (err.errMsg || JSON.stringify(err)),
-      });
-    });
-
-    this._audioCtx = audio;
-    // 所有事件注册完毕后再设置 src 并播放
-    // 测试：先用网络MP3验证播放器是否正常
-    audio.src = filePath;
-    // audio.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-    audio.play();
-    // P1-3: 如果 onPlayStart 已将状态切换为 playing，这里保持不变
-    // 否则在此设置（兜底）
-    if (this.data.playStatus !== 'playing') {
-      this.setData({ playStatus: 'playing' });
-    }
   },
 
   /**
@@ -538,9 +563,10 @@ Page({
       await bookService.addPage(bookId, imageHash);
       wx.hideLoading();
       wx.showToast({ title: '已加入书架 📚', icon: 'success' });
+      this.setData({ inShelf: true });
     } catch (err) {
       wx.hideLoading();
-      wx.showToast({ title: '添加失败', icon: 'none' });
+      wx.showToast({ title: err.message || '添加失败', icon: 'none', duration: 2500 });
       console.error('[Result] 加入书架失败:', err.message);
     }
   },
@@ -563,9 +589,10 @@ Page({
           await bookService.addPage(book.bookId, this.data.imageHash);
           wx.hideLoading();
           wx.showToast({ title: '已加入新绘本 📚', icon: 'success' });
+          this.setData({ inShelf: true });
         } catch (err) {
           wx.hideLoading();
-          wx.showToast({ title: '操作失败', icon: 'none' });
+          wx.showToast({ title: err.message || '操作失败', icon: 'none', duration: 2500 });
         }
       },
     });

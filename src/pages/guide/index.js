@@ -30,8 +30,9 @@
  * @version 0.2.0
  */
 
-const ocrService   = require('../../services/ocr.service');
-const cacheService = require('../../services/cache.service');
+const ocrService        = require('../../services/ocr.service');
+const llmRefineService  = require('../../services/llm-refine.service');
+const cacheService      = require('../../services/cache.service');
 const imageUtils   = require('../../utils/image');
 const network      = require('../../utils/network');
 const { IMAGE_TARGET_SIZE_BYTES } = require('../../config');
@@ -85,6 +86,16 @@ Page({
     // 扩展点：可从 options 接收 bookId 等参数，用于绑定书目记录
     if (options.bookId) {
       console.info('[Guide] 关联书目 bookId:', options.bookId);
+    }
+  },
+
+  /**
+   * 从 result 页返回时，若状态仍是 done，直接跳回首页
+   * 避免用户看到「识别成功，正在跳转」的冻结画面
+   */
+  onShow() {
+    if (this.data.status === 'done') {
+      wx.redirectTo({ url: '/src/pages/home/index' });
     }
   },
 
@@ -151,9 +162,13 @@ Page({
         onProgress: (pct) => this.setData({ progress: pct }),
       });
 
-      // Step 6: 将 OCR 结果写入缓存（audioPath 留空，TTS 完成后由结果页补写）
+      // Step 6: LLM 段落整理（静默降级：失败则使用原始文字）
+      this.setData({ status: 'refining' });
+      const refinedText = await llmRefineService.refine(ocrResult.text);
+
+      // Step 7: 将整理后文字写入缓存（audioPath 留空，TTS 完成后由结果页补写）
       await cacheService.setPage(imageHash, {
-        text: ocrResult.text,
+        text: refinedText,
         imagePath: compressedPath,
       });
 
@@ -162,7 +177,7 @@ Page({
       this._navigateToResult({
         fromCache: false,
         hash: imageHash,
-        text: ocrResult.text,
+        text: refinedText,
       });
 
     } catch (err) {

@@ -55,7 +55,12 @@ App({
     console.info('[App] 小程序启动', options);
 
     // 全局设置音频从扬声器外放（不走听筒）
-    wx.setInnerAudioOption({ speakerOn: true });
+    // success 回调确保 iOS 音频会话切换完成
+    wx.setInnerAudioOption({
+      speakerOn: true,
+      success: () => console.info('[App] 音频输出已切换到扬声器'),
+      fail: (err) => console.warn('[App] setInnerAudioOption 失败:', err),
+    });
 
     // 初始化网络监听（network.js 被 require 时已自动触发，此处同步全局数据）
     this._syncNetworkStatus();

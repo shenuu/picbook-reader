@@ -159,13 +159,16 @@
 
     <!-- 加入书架按钮（有 imageHash 时显示） -->
     <button
-      wx:if="{{imageHash}}"
+      wx:if="{{imageHash && !inShelf}}"
       class="btn-shelf-add"
       bindtap="onTapAddToShelf"
       hover-class="btn-shelf-add--hover"
     >
       <text>📚 加入书架</text>
     </button>
+    <view wx:if="{{imageHash && inShelf}}" class="btn-shelf-added">
+      <text>✅ 已在书架</text>
+    </view>
 
   </view>
 

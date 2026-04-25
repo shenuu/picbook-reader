@@ -40,6 +40,9 @@ const TTS_TENCENT_BASE_URL = ENV.TTS_TENCENT_URL;
 /** Azure Neural TTS 云函数直接 URL（英文专用） */
 const TTS_AZURE_BASE_URL = ENV.TTS_AZURE_URL || '';
 
+/** LLM 段落整理云函数 URL */
+const LLM_REFINE_BASE_URL = ENV.LLM_REFINE_URL || '';
+
 // ─────────────────────────────────────────────────────────────────
 //  TTS 配置（P0-1 安全修复：移除硬编码密钥）
 // ─────────────────────────────────────────────────────────────────
@@ -62,6 +65,16 @@ const TTS_TENCENT_URL = TTS_TENCENT_BASE_URL;
 
 /** Azure Neural TTS 云函数 URL（英文专用） */
 const TTS_AZURE_URL = TTS_AZURE_BASE_URL;
+
+/** LLM 段落整理云函数 URL */
+const LLM_REFINE_URL = LLM_REFINE_BASE_URL;
+
+// ─────────────────────────────────────────────────────────────────
+//  LLM 段落整理配置
+// ─────────────────────────────────────────────────────────────────
+
+/** LLM 整理请求超时（毫秒）。超时后静默降级，使用原始 OCR 文字 */
+const LLM_REFINE_TIMEOUT_MS = 8000;
 
 /** OCR 请求完整 URL */
 const OCR_URL = OCR_BASE_URL;
@@ -210,6 +223,8 @@ module.exports = {
   TTS_WS_SIGN_URL,
   TTS_TENCENT_URL,
   TTS_AZURE_URL,
+  LLM_REFINE_URL,
+  LLM_REFINE_TIMEOUT_MS,
   OCR_TIMEOUT_MS,
   OCR_MAX_RETRY,
   OCR_RETRY_BASE_DELAY_MS,

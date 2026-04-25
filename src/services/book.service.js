@@ -21,6 +21,8 @@
 'use strict';
 
 const BOOKS_STORAGE_KEY = '__picbook_books_v1__';
+const MAX_BOOKS = 5;
+const MAX_PAGES_PER_BOOK = 50;
 
 // ─── 内存缓存 ─────────────────────────────────────────────
 /** @type {Map<string, BookEntry>|null} */
@@ -100,6 +102,11 @@ async function getBook(bookId) {
  */
 async function createBook(title) {
   await _ensureInitialized();
+  if (_books.size >= MAX_BOOKS) {
+    const err = new Error(`书架最多保存 ${MAX_BOOKS} 本绘本，请先删除旧绘本`);
+    err.code = 'BOOKS_LIMIT';
+    throw err;
+  }
   const now = Date.now();
   const bookId = 'book_' + now + '_' + Math.random().toString(36).slice(2, 7);
   const book = {
@@ -126,6 +133,11 @@ async function addPage(bookId, pageHash) {
   const book = _books.get(bookId);
   if (!book) throw new Error('绘本不存在: ' + bookId);
   if (!book.pages.includes(pageHash)) {
+    if (book.pages.length >= MAX_PAGES_PER_BOOK) {
+      const err = new Error(`每本绘本最多 ${MAX_PAGES_PER_BOOK} 页，请先删除旧页面`);
+      err.code = 'PAGES_LIMIT';
+      throw err;
+    }
     book.pages.push(pageHash);
   }
   book.updatedAt = Date.now();
@@ -191,6 +203,47 @@ async function deleteBook(bookId) {
   await _persist();
 }
 
+/**
+ * 移动某页到新位置（用于排序）
+ * @param {string} bookId
+ * @param {number} fromIndex  原下标
+ * @param {number} toIndex    目标下标
+ */
+async function movePage(bookId, fromIndex, toIndex) {
+  await _ensureInitialized();
+  const book = _books.get(bookId);
+  if (!book) throw new Error('绘本不存在');
+  const pages = book.pages;
+  if (fromIndex < 0 || fromIndex >= pages.length) return;
+  if (toIndex < 0 || toIndex >= pages.length) return;
+  if (fromIndex === toIndex) return;
+  const [moved] = pages.splice(fromIndex, 1);
+  pages.splice(toIndex, 0, moved);
+  // 书签随页移动
+  if (book.lastPageIndex === fromIndex) {
+    book.lastPageIndex = toIndex;
+  } else if (fromIndex < toIndex) {
+    if (book.lastPageIndex > fromIndex && book.lastPageIndex <= toIndex) book.lastPageIndex--;
+  } else {
+    if (book.lastPageIndex >= toIndex && book.lastPageIndex < fromIndex) book.lastPageIndex++;
+  }
+  book.updatedAt = Date.now();
+  await _persist();
+}
+
+/**
+ * 返回所有绘本中所有 pageHash 的 Set（用于判断某页是否已在书架）
+ * @returns {Promise<Set<string>>}
+ */
+async function getAllPageHashes() {
+  await _ensureInitialized();
+  const set = new Set();
+  for (const book of _books.values()) {
+    for (const h of book.pages) set.add(h);
+  }
+  return set;
+}
+
 module.exports = {
   getAllBooks,
   getBook,
@@ -200,4 +253,6 @@ module.exports = {
   updateBookmark,
   renameBook,
   deleteBook,
+  movePage,
+  getAllPageHashes,
 };

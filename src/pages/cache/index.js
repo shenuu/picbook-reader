@@ -15,6 +15,7 @@
  */
 
 const cacheService = require('../../services/cache.service');
+const bookService  = require('../../services/book.service');
 
 Page({
 
@@ -50,6 +51,20 @@ Page({
     // ── 条目列表 ───────────────────────────────
     /** 缓存条目列表（最新 → 最旧），每项含 preview、timeLabel、hasAudio */
     entries: [],
+
+    // ── 左滑 & 书架 sheet ──────────────────────
+    /** 当前左滑展开的条目 index（-1 = 无） */
+    swipeOpenIndex: -1,
+    /** 各条目的 translateX（rpx），key = index */
+    swipeX: {},
+    /** 书架 sheet 是否显示 */
+    showShelfSheet: false,
+    /** 当前准备加入书架的 pageHash */
+    pendingHash: '',
+    /** 书架列表（sheet 打开时加载） */
+    books: [],
+    /** 书架列表加载中 */
+    booksLoading: false,
 
     // ── 页面状态 ───────────────────────────────
     /** 是否正在加载 */
@@ -88,11 +103,16 @@ Page({
       // 获取所有条目（从 cacheService 读取，最新在前）
       const rawEntries = await cacheService.getAllEntries();
 
+      // 过滤掉已加入书架的页
+      const shelfHashes = await bookService.getAllPageHashes();
+
       // 格式化条目列表（最新在前）
       const entries = rawEntries
         .slice()
         .reverse() // LRU 返回最旧→最新，取反后最新在前
-        .map((entry) => ({
+        .filter((entry) => !shelfHashes.has(entry.pageHash))
+        .map((entry, index) => ({
+          index,
           pageHash: entry.pageHash,
           preview: (entry.text || '（无文字）').slice(0, 30),
           timeLabel: _formatTimestamp(entry.timestamp),
@@ -130,6 +150,8 @@ Page({
         totalCount,
         hitRateLabel,
         entries,
+        swipeX: {},
+        swipeOpenIndex: -1,
         loading: false,
       });
 
@@ -222,6 +244,14 @@ Page({
     const { hash, text } = e.currentTarget.dataset;
     if (!text) return;
 
+    // 若该条目已左滑展开，点击主体收回而非跳转
+    const { swipeOpenIndex } = this.data;
+    const idx = e.currentTarget.dataset.index;
+    if (swipeOpenIndex === idx) {
+      this._closeSwipe();
+      return;
+    }
+
     wx.navigateTo({
       url: `/src/pages/result/index?hash=${encodeURIComponent(hash)}&fromCache=true`,
       success: (res) => {
@@ -230,6 +260,113 @@ Page({
           fromCache: true,
           hash,
         });
+      },
+    });
+  },
+
+  // ─────────────────────────────────────────────
+  //  左滑手势
+  // ─────────────────────────────────────────────
+
+  onItemTouchStart(e) {
+    this._touchStartX = e.touches[0].clientX;
+    this._touchStartY = e.touches[0].clientY;
+    this._touchMoved  = false;
+  },
+
+  onItemTouchMove(e) {
+    const dx = e.touches[0].clientX - this._touchStartX;
+    const dy = e.touches[0].clientY - this._touchStartY;
+    // 垂直滑动超过水平时，不拦截（允许页面滚动）
+    if (!this._touchMoved && Math.abs(dy) > Math.abs(dx)) return;
+    this._touchMoved = true;
+
+    const idx    = e.currentTarget.dataset.index;
+    const REVEAL = 160; // 左滑最多露出 160px（加入书架按钮宽度）
+    const clamped = Math.max(-REVEAL, Math.min(0, dx));
+    this.setData({ [`swipeX.${idx}`]: clamped });
+  },
+
+  onItemTouchEnd(e) {
+    if (!this._touchMoved) return;
+    const idx = e.currentTarget.dataset.index;
+    const cur = this.data.swipeX[idx] || 0;
+    const THRESHOLD = -60;
+
+    if (cur < THRESHOLD) {
+      // 滑动超过阈值 → 全部展开，关闭其他
+      const swipeX = {};
+      swipeX[idx] = -160;
+      this.setData({ swipeX, swipeOpenIndex: idx });
+    } else {
+      // 回弹
+      this._closeSwipe();
+    }
+  },
+
+  /** 点击页面空白区域收起所有左滑 */
+  onTapPage() {
+    if (this.data.swipeOpenIndex !== -1) this._closeSwipe();
+  },
+
+  _closeSwipe() {
+    this.setData({ swipeX: {}, swipeOpenIndex: -1 });
+  },
+
+  // ─────────────────────────────────────────────
+  //  加入书架
+  // ─────────────────────────────────────────────
+
+  async onTapAddToShelf(e) {
+    const { hash } = e.currentTarget.dataset;
+    this._closeSwipe();
+    this.setData({ showShelfSheet: true, pendingHash: hash, booksLoading: true, books: [] });
+    try {
+      const books = await bookService.getAllBooks();
+      this.setData({ books, booksLoading: false });
+    } catch (_) {
+      this.setData({ booksLoading: false });
+    }
+  },
+
+  onTapShelfSheetMask() {
+    this.setData({ showShelfSheet: false, pendingHash: '' });
+  },
+
+  onShelfSheetPrevent() { /* 阻止蒙层滚动穿透 */ },
+
+  async onTapSelectBook(e) {
+    const { bookId } = e.currentTarget.dataset;
+    const { pendingHash } = this.data;
+    if (!bookId || !pendingHash) return;
+    this.setData({ showShelfSheet: false });
+    try {
+      await bookService.addPage(bookId, pendingHash);
+      wx.showToast({ title: '已加入书架', icon: 'success' });
+      await this._loadData(); // 刷新列表（已入书架的条目会被过滤掉）
+    } catch (err) {
+      wx.showToast({ title: err.message || '加入失败', icon: 'none' });
+    }
+  },
+
+  onTapCreateBook() {
+    this.setData({ showShelfSheet: false });
+    wx.showModal({
+      title: '新建绘本',
+      editable: true,
+      placeholderText: '请输入绘本名称',
+      success: async (res) => {
+        if (!res.confirm || !res.content.trim()) return;
+        try {
+          await bookService.createBook(res.content.trim());
+          // 重新打开 sheet（用 pendingHash 继续流程）
+          const { pendingHash } = this.data;
+          this.setData({ showShelfSheet: true, booksLoading: true, books: [] });
+          const books = await bookService.getAllBooks();
+          this.setData({ books, booksLoading: false, pendingHash });
+        } catch (err) {
+          wx.showToast({ title: err.message || '创建失败', icon: 'none' });
+        }
       },
     });
   },

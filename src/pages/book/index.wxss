@@ -6,7 +6,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
   background: #FFFDF8;
 }
 
@@ -24,13 +24,9 @@
   padding: 28rpx 32rpx;
   background: #fff;
   border-bottom: 1rpx solid #f0e8e0;
-  gap: 16rpx;
 }
 
-.book-header__info {
-  flex: 1;
-  min-width: 0;
-}
+.book-header__info { flex: 1; min-width: 0; }
 
 .book-header__title {
   font-size: 36rpx;
@@ -49,31 +45,56 @@
   margin-top: 6rpx;
 }
 
-.btn-rename {
-  font-size: 24rpx;
-  color: #FF7043;
-  background: transparent;
-  border: 1rpx solid #FF7043;
-  border-radius: 32rpx;
-  padding: 10rpx 28rpx;
-  flex-shrink: 0;
-}
-
-/* ── 继续阅读 ── */
+/* ── 继续播放栏 ── */
 .continue-bar {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
   padding: 20rpx 32rpx;
   background: #FFF3E0;
 }
 
 .btn-continue {
+  flex: 1;
   background: #FF7043;
   color: #fff;
   border-radius: 48rpx;
   font-size: 28rpx;
   padding: 20rpx;
-  width: 100%;
   border: none;
   font-weight: 600;
+  margin: 0;
+}
+
+.btn-from-start {
+  flex-shrink: 0;
+  background: transparent;
+  color: #FF7043;
+  border: 2rpx solid #FF7043;
+  border-radius: 48rpx;
+  font-size: 26rpx;
+  padding: 18rpx 28rpx;
+  margin: 0;
+  line-height: 1;
+}
+
+/* ── 每页右侧「从此页播放」按钮 ── */
+.play-from-btn {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #FF7043;
+  color: #fff;
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.play-from-btn--disabled {
+  background: #E0E0E0;
+  color: #aaa;
+  pointer-events: none;
 }
 
 /* ── 空状态 ── */
@@ -84,11 +105,7 @@
   padding: 100rpx 48rpx;
   gap: 24rpx;
 }
-
-.empty__icon {
-  font-size: 80rpx;
-}
-
+.empty__icon { font-size: 80rpx; }
 .empty__text {
   font-size: 28rpx;
   color: #999;
@@ -97,21 +114,71 @@
   white-space: pre-line;
 }
 
-/* ── 页面列表 ── */
-.list {
-  flex: 1;
+/* ── 拖拽提示横幅 ── */
+.drag-hint {
+  text-align: center;
+  font-size: 24rpx;
+  color: #FF7043;
+  background: #FFF3E0;
+  padding: 10rpx 0;
 }
 
+/* ── 列表 ── */
+.list { flex: 1; height: 0; }
+
+/* ── 行包装（用于 overflow hidden + 左滑效果） ── */
+.row-wrap {
+  position: relative;
+  overflow: hidden;
+  margin: 12rpx 24rpx;
+  border-radius: 16rpx;
+}
+
+/* 拖拽中被拖走的条目变透明 */
+.row-wrap--dragging {
+  opacity: 0.3;
+}
+
+/* 拖拽悬停插入线 - 已移除，保持 item 原始大小 */
+
+/* ── 删除按钮（右侧隐藏区） ── */
+.delete-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E53935;
+  border-radius: 0 16rpx 16rpx 0;
+}
+.delete-btn__icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.2);
+  font-size: var(--text-sm);
+  color: #fff;
+}
+
+/* ── 页面条目 ── */
 .page-item {
   display: flex;
   align-items: center;
-  padding: 24rpx 32rpx;
+  padding: 24rpx 20rpx;
   background: #fff;
-  margin: 12rpx 24rpx;
   border-radius: 16rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   gap: 20rpx;
   border: 2rpx solid transparent;
+  /* 左滑动画 */
+  transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .page-item--current {
@@ -119,6 +186,12 @@
   background: #FFF8F6;
 }
 
+.page-item--playing {
+  border-color: #FF7043;
+  background: #FFF3EE;
+}
+
+/* ── 序号圆圈 ── */
 .page-item__num {
   width: 56rpx;
   height: 56rpx;
@@ -132,15 +205,10 @@
   font-weight: 700;
   flex-shrink: 0;
 }
+.page-item--current .page-item__num { background: #E64A19; }
 
-.page-item--current .page-item__num {
-  background: #E64A19;
-}
-
-.page-item__content {
-  flex: 1;
-  min-width: 0;
-}
+/* ── 内容区 ── */
+.page-item__content { flex: 1; min-width: 0; }
 
 .page-item__text {
   font-size: 26rpx;
@@ -164,23 +232,121 @@
   padding: 4rpx 14rpx;
   border-radius: 24rpx;
 }
+.tag--audio { background: #E8F5E9; color: #388E3C; }
+.tag--bookmark { background: #FFF3E0; color: #E65100; }
 
-.tag--audio {
-  background: #E8F5E9;
-  color: #388E3C;
-}
-
-.tag--bookmark {
-  background: #FFF3E0;
-  color: #E65100;
-}
-
-.page-item__arrow {
-  font-size: 44rpx;
+/* ── 拖拽把手 ── */
+.drag-handle {
+  font-size: 32rpx;
   color: #ccc;
+  flex-shrink: 0;
+  padding: 0 4rpx;
+  letter-spacing: -2rpx;
+}
+
+/* ── 拖拽浮动卡片 ── */
+.drag-float {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  display: flex;
+  align-items: center;
+  padding: 24rpx 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.18);
+  border: 2rpx solid #FF7043;
+  gap: 20rpx;
+  z-index: 999;
+  pointer-events: none;
+}
+
+/* ── 拖拽时全屏蒙层（阻止 scroll-view 被带动）── */
+.drag-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 998;
+  background: transparent;
+}
+
+.safe-bottom { }
+
+/* ── 底部播放控制栏 ── */
+.player-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1rpx solid #f0e8e0;
+  padding: 16rpx 24rpx 48rpx;
+  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.08);
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  z-index: 100;
+}
+
+.player-bar--visible { transform: translateY(0); }
+
+.player-bar__info {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+  overflow: hidden;
+}
+
+.player-bar__page {
+  font-size: 22rpx;
+  color: #FF7043;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
-.safe-bottom {
-  height: 48rpx;
+.player-bar__text {
+  font-size: 24rpx;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
+
+.player-bar__synth {
+  font-size: 24rpx;
+  color: #FF7043;
+  flex: 1;
+}
+
+.player-bar__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32rpx;
+}
+
+.player-btn {
+  width: 72rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F5F5F5;
+  font-size: 32rpx;
+  color: #333;
+}
+
+.player-btn--main {
+  width: 96rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 40rpx;
+  background: #FF7043;
+  color: #fff;
+}
+
+.player-btn--stop { background: #FFEBEE; color: #E53935; }
+.player-btn--disabled { opacity: 0.3; }

@@ -2,5 +2,6 @@
   "navigationBarTitleText": "缓存管理",
   "navigationBarBackgroundColor": "#FFFFFF",
   "navigationBarTextStyle": "black",
-  "backgroundColor": "#F7F3EE"
+  "backgroundColor": "#F7F3EE",
+  "disableScroll": true
 }

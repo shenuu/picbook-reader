@@ -1,6 +1,6 @@
 /**
  * @file pages/shelf/index.wxss
- * @description 书架页样式
+ * @description 书架页样式 - 左滑删除
  */
 
 .page {
@@ -58,15 +58,53 @@
   flex: 1;
 }
 
+/* ── 左滑容器：撑满宽度 + overflow hidden ── */
+.row-wrap {
+  position: relative;
+  overflow: hidden;
+  margin: 16rpx 24rpx;
+  border-radius: 20rpx;
+}
+
+/* ── 删除按钮（绝对定位在右侧外） ── */
+.delete-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E53935;
+  border-radius: 0 20rpx 20rpx 0;
+  z-index: 1;
+}
+
+.delete-btn__icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.2);
+  font-size: var(--text-sm);
+  color: #fff;
+}
+
+/* ── 条目主体 ── */
 .book-item {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   padding: 28rpx 32rpx;
   background: #fff;
-  margin: 16rpx 24rpx;
   border-radius: 20rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
   gap: 24rpx;
+  transition: transform 0.2s ease;
 }
 
 .book-item__icon {
@@ -96,15 +134,17 @@
   display: block;
 }
 
-.book-item__arrow {
-  font-size: 44rpx;
-  color: #ccc;
+.book-item__rename {
   flex-shrink: 0;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  opacity: 0.6;
 }
 
-.list-hint {
-  text-align: center;
-  font-size: 22rpx;
-  color: #ccc;
-  padding: 16rpx 0 48rpx;
+.safe-bottom {
+  height: 48rpx;
 }

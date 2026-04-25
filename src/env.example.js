@@ -44,4 +44,11 @@ module.exports = {
    * 示例：'https://1234567890-xxxxxxxxxx.ap-guangzhou.tencentscf.com'
    */
   TTS_TENCENT_URL: 'https://REPLACE_ME.ap-guangzhou.tencentscf.com',
+
+  /**
+   * LLM 段落整理云函数 URL（腾讯混元大模型，OCR 后自动整理断行）
+   * 在腾讯云函数控制台 → 函数管理 → 函数 URL 中查看
+   * 示例：'https://1234567890-xxxxxxxxxx.ap-guangzhou.tencentscf.com'
+   */
+  LLM_REFINE_URL: 'https://REPLACE_ME.ap-guangzhou.tencentscf.com',
 };

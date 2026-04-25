@@ -1,18 +1,9 @@
 <!--
   @file pages/shelf/index.wxml
-  @description 书架页模板
-
-  布局：
-  ┌─────────────────────────────────┐
-  │  「＋ 新建绘本」工具栏           │
-  ├─────────────────────────────────┤
-  │  空状态 / 加载中 / 绘本列表      │
-  └─────────────────────────────────┘
-
-  @author Jamie Park
+  @description 书架页模板 - 左滑露出删除，编辑按钮保留在条目内
 -->
 
-<view class="page">
+<view class="page" catchtap="onSwipeClose">
 
   <!-- 工具栏 -->
   <view class="toolbar">
@@ -32,25 +23,52 @@
 
   <!-- 绘本列表 -->
   <scroll-view wx:else scroll-y class="list">
-    <view
-      wx:for="{{books}}"
-      wx:key="bookId"
-      class="book-item"
-      data-book-id="{{item.bookId}}"
-      data-title="{{item.title}}"
-      bindtap="onTapBook"
-      bindlongpress="onLongPressBook"
-    >
-      <view class="book-item__icon">📖</view>
-      <view class="book-item__info">
-        <text class="book-item__title">{{item.title}}</text>
-        <text class="book-item__meta">
-          {{item.pages.length}} 页{{item.lastPageIndex >= 0 ? ' · 读到第 ' + (item.lastPageIndex + 1) + ' 页' : ' · 未开始'}}
-        </text>
+    <view wx:for="{{books}}" wx:key="bookId">
+
+      <!-- row-wrap：overflow hidden，限制左滑范围 -->
+      <view class="row-wrap">
+
+        <!-- 删除按钮（藏在右侧，左滑后露出） -->
+        <view
+          class="delete-btn"
+          data-book-id="{{item.bookId}}"
+          data-title="{{item.title}}"
+          catchtap="onTapDeleteBook"
+        >
+          <text class="delete-btn__icon">✕</text>
+        </view>
+
+        <!-- 条目主体 -->
+        <view
+          class="book-item"
+          style="transform: translateX({{swipeX[item.bookId] || 0}}px);"
+          data-book-id="{{item.bookId}}"
+          data-title="{{item.title}}"
+          data-swipe-key="{{item.bookId}}"
+          bindtouchstart="onSwipeTouchStart"
+          bindtouchmove="onSwipeTouchMove"
+          bindtouchend="onSwipeTouchEnd"
+          bindtap="onTapBook"
+        >
+          <view class="book-item__icon">📖</view>
+          <view class="book-item__info">
+            <text class="book-item__title">{{item.title}}</text>
+            <text class="book-item__meta">
+              {{item.pages.length}} 页{{item.lastPageIndex >= 0 ? ' · 读到第 ' + (item.lastPageIndex + 1) + ' 页' : ' · 未开始'}}
+            </text>
+          </view>
+          <!-- 编辑按钮（始终可见） -->
+          <view
+            class="book-item__rename"
+            data-book-id="{{item.bookId}}"
+            data-title="{{item.title}}"
+            catchtap="onTapRenameBook"
+          >✏️</view>
+        </view>
+
       </view>
-      <view class="book-item__arrow">›</view>
     </view>
-    <view class="list-hint">长按绘本可删除</view>
+    <view class="safe-bottom"></view>
   </scroll-view>
 
 </view>
